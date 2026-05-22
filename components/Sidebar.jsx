@@ -52,11 +52,6 @@ export function Sidebar({ user }) {
             >
               <item.icon className={cn("h-[18px] w-[18px]", isActive ? "text-blue-600" : "text-slate-400")} />
               <span>{item.label}</span>
-              {item.label === 'Activity' && (
-                <span className="absolute right-4 bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
-                  12
-                </span>
-              )}
             </Link>
           );
         })}
