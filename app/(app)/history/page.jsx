@@ -40,6 +40,7 @@ export default async function HistoryPage() {
               <TableRow>
                 <TableHead className="w-[150px]">Tanggal Dibuat</TableHead>
                 <TableHead>Jenis Dokumen</TableHead>
+                <TableHead>Dibuat Oleh</TableHead>
                 <TableHead>Nama / Kepada</TableHead>
                 <TableHead>Nomor Dokumen</TableHead>
                 <TableHead className="text-right">Aksi</TableHead>
@@ -51,7 +52,12 @@ export default async function HistoryPage() {
                   <TableCell className="font-medium text-slate-600">
                     {new Date(log.created_at).toLocaleDateString('id-ID')}
                   </TableCell>
-                  <TableCell className="uppercase text-slate-800">{log.document_type}</TableCell>
+                  <TableCell>
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 uppercase">
+                      {log.document_type}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-sm text-slate-500">{log.user_email}</TableCell>
                   <TableCell>{log.employee_name || "-"}</TableCell>
                   <TableCell className="text-sm font-mono text-slate-500">{log.document_number}</TableCell>
                   <TableCell className="text-right">

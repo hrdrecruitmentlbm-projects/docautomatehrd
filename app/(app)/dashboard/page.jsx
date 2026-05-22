@@ -1,47 +1,82 @@
 import { auth } from "@/auth";
-import { documentConfigs } from "@/lib/document-configs";
-import { DocumentCard } from "@/components/DocumentCard";
-import { LogOut } from "lucide-react";
-import { signOut } from "@/auth";
+import { supabaseAdmin } from "@/lib/supabase";
+import { DashboardCharts } from "@/components/DashboardCharts";
+import { FileText, FileSignature, FilePlus, Users } from "lucide-react";
 
-export default async function DashboardPage() {
+export default async function NewDashboardPage() {
   const session = await auth();
 
+  const { data: logs, error } = await supabaseAdmin
+    .from('document_logs')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  const totalDocs = logs?.length || 0;
+  
+  const pkwtCount = logs?.filter(l => l.document_type?.toLowerCase() === 'pkwt').length || 0;
+  const skCount = logs?.filter(l => l.document_type?.toLowerCase() === 'sk').length || 0;
+  
+  // Unique creators
+  const uniqueUsers = new Set(logs?.map(l => l.user_email)).size;
+
   return (
-    <div className="max-w-5xl mx-auto">
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Dashboard</h1>
-          <p className="text-slate-500 mt-1">Pilih jenis dokumen yang ingin Anda buat.</p>
-        </div>
-        
-        <div className="flex items-center space-x-4 bg-white px-4 py-2 rounded-xl shadow-sm border border-slate-100">
-          <div className="text-right hidden md:block">
-            <p className="text-sm font-semibold text-slate-900">{session?.user?.name}</p>
-            <p className="text-xs text-slate-500">{session?.user?.email}</p>
+    <div className="max-w-6xl mx-auto">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Analytics Dashboard</h1>
+        <p className="text-slate-500 mt-1">Ringkasan statistik penggunaan aplikasi DocAuto HR.</p>
+      </div>
+
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 flex items-center space-x-4">
+          <div className="bg-blue-100 p-3 rounded-lg text-blue-600">
+            <FileText className="w-6 h-6" />
           </div>
-          {session?.user?.image && (
-            <img src={session.user.image} alt="User" className="w-10 h-10 rounded-full border-2 border-slate-100" />
-          )}
-          <div className="w-px h-8 bg-slate-200 mx-2"></div>
-          <form
-            action={async () => {
-              "use server";
-              await signOut();
-            }}
-          >
-            <button type="submit" className="text-slate-400 hover:text-red-500 transition-colors p-2 rounded-lg hover:bg-red-50" title="Keluar">
-              <LogOut className="w-5 h-5" />
-            </button>
-          </form>
+          <div>
+            <p className="text-sm font-medium text-slate-500">Total Dokumen</p>
+            <h4 className="text-2xl font-bold text-slate-900">{totalDocs}</h4>
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 flex items-center space-x-4">
+          <div className="bg-emerald-100 p-3 rounded-lg text-emerald-600">
+            <FileSignature className="w-6 h-6" />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-slate-500">Total PKWT</p>
+            <h4 className="text-2xl font-bold text-slate-900">{pkwtCount}</h4>
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 flex items-center space-x-4">
+          <div className="bg-amber-100 p-3 rounded-lg text-amber-600">
+            <FilePlus className="w-6 h-6" />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-slate-500">Total SK</p>
+            <h4 className="text-2xl font-bold text-slate-900">{skCount}</h4>
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 flex items-center space-x-4">
+          <div className="bg-purple-100 p-3 rounded-lg text-purple-600">
+            <Users className="w-6 h-6" />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-slate-500">Pengguna Aktif</p>
+            <h4 className="text-2xl font-bold text-slate-900">{uniqueUsers}</h4>
+          </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {documentConfigs.map((config) => (
-          <DocumentCard key={config.id} config={config} />
-        ))}
-      </div>
+      {/* Charts */}
+      {logs && logs.length > 0 ? (
+        <DashboardCharts logs={logs} />
+      ) : (
+        <div className="mt-8 p-12 bg-white rounded-xl shadow-sm border border-slate-100 text-center text-slate-500">
+          Belum ada data dokumen untuk ditampilkan pada grafik.
+        </div>
+      )}
     </div>
   );
 }

@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, History, Settings, FileText } from "lucide-react";
+import { LayoutDashboard, FilePlus, History, Settings, FileText } from "lucide-react";
 
 const navItems = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+  { href: "/input-dokumen", icon: FilePlus, label: "Input Dokumen" },
   { href: "/history", icon: History, label: "Riwayat Dokumen" },
   { href: "/settings", icon: Settings, label: "Pengaturan" },
 ];
