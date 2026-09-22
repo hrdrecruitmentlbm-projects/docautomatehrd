@@ -1,5 +1,5 @@
 import { auth } from "@/auth";
-import { extractSpreadsheetId, getSheetTabs } from "@/lib/sheets";
+import { extractSpreadsheetId, getSheetTabs, isValidGoogleId } from "@/lib/sheets";
 
 // GET /api/sheet-tabs?spreadsheetId=<url|id> — list tab titles for the picker.
 export async function GET(req) {
@@ -9,8 +9,8 @@ export async function GET(req) {
   }
   const { searchParams } = new URL(req.url);
   const spreadsheetId = extractSpreadsheetId(searchParams.get("spreadsheetId"));
-  if (!spreadsheetId) {
-    return Response.json({ error: "spreadsheetId wajib diisi" }, { status: 400 });
+  if (!isValidGoogleId(spreadsheetId)) {
+    return Response.json({ error: "Link tidak valid. Tempel URL lengkap (docs.google.com/spreadsheets/d/...)." }, { status: 400 });
   }
   try {
     const tabs = await getSheetTabs(session.accessToken, spreadsheetId);

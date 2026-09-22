@@ -3,6 +3,7 @@ import {
   extractFolderId,
   extractFileId,
   getSheetTabs,
+  isValidGoogleId,
   listSpreadsheetFiles,
   pickNewestFile,
   extractPeriode,
@@ -23,6 +24,9 @@ export async function POST(req) {
   try {
     const directId = extractFileId(body?.spreadsheetId || body?.sheetUrl || "");
     if (directId) {
+      if (!isValidGoogleId(directId)) {
+        return Response.json({ error: "Link file payroll tidak valid. Tempel URL lengkap." }, { status: 400 });
+      }
       const tabs = await getSheetTabs(session.accessToken, directId);
       const tab = body?.tab && tabs.includes(body.tab) ? body.tab : tabs[0];
       const aoa = await readTabValues(session.accessToken, directId, tab);
@@ -32,8 +36,8 @@ export async function POST(req) {
     }
 
     const folderId = extractFolderId(body?.folderId || body?.folderUrl);
-    if (!folderId) {
-      return Response.json({ error: "Link folder payroll wajib diisi" }, { status: 400 });
+    if (!isValidGoogleId(folderId)) {
+      return Response.json({ error: "Link folder tidak valid. Tempel URL folder (.../drive/folders/...) atau link file spreadsheet langsung." }, { status: 400 });
     }
     const files = await listSpreadsheetFiles(session.accessToken, folderId);
     if (files.length === 0) {

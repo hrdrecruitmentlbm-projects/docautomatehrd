@@ -18,8 +18,13 @@ export function SheetsSync({ initialMasterUrl = "", initialMasterTab = "", initi
   const [masterResult, setMasterResult] = useState(null);
 
   const [payrollFolder, setPayrollFolder] = useState(initialPayrollFolder);
+  const [payrollPeriode, setPayrollPeriode] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  });
   const [busyPayroll, setBusyPayroll] = useState(false);
   const [payrollResult, setPayrollResult] = useState(null);
+  const payrollIsFile = payrollFolder.includes("/spreadsheets/d/");
 
   const loadTabs = async () => {
     if (!masterUrl.trim()) return toast.error("Tempel link spreadsheet master dulu");
@@ -63,14 +68,17 @@ export function SheetsSync({ initialMasterUrl = "", initialMasterTab = "", initi
   };
 
   const syncPayroll = async () => {
-    if (!payrollFolder.trim()) return toast.error("Tempel link folder payroll dulu");
+    if (!payrollFolder.trim()) return toast.error("Tempel link folder atau file payroll dulu");
+    if (payrollIsFile && !/^\d{4}-\d{2}$/.test(payrollPeriode)) return toast.error("Periode harus YYYY-MM");
     setBusyPayroll(true);
     setPayrollResult(null);
     try {
       const res = await fetch("/api/sync-payroll", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ folderUrl: payrollFolder.trim() }),
+        body: JSON.stringify(payrollIsFile
+          ? { sheetUrl: payrollFolder.trim(), periode_bulan: payrollPeriode }
+          : { folderUrl: payrollFolder.trim() }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Gagal sinkron payroll");
@@ -90,7 +98,7 @@ export function SheetsSync({ initialMasterUrl = "", initialMasterTab = "", initi
       <Card className="border-slate-200 shadow-sm">
         <CardHeader className="border-b border-slate-100 bg-slate-50/50">
           <CardTitle className="text-lg text-slate-800">1. Database Master Karyawan</CardTitle>
-          <CardDescription>Tempel link Google Sheet master, pilih tab, lalu Sync. Sheet tetap sumber utama.</CardDescription>
+          <CardDescription>Tempel link Google Sheet master, pilih tab, lalu Sync. Pastikan Sheet dibagikan ke email login Anda (Viewer cukup).</CardDescription>
         </CardHeader>
         <CardContent className="p-6 space-y-4">
           <div className="space-y-2">
@@ -133,19 +141,28 @@ export function SheetsSync({ initialMasterUrl = "", initialMasterTab = "", initi
       <Card className="border-slate-200 shadow-sm">
         <CardHeader className="border-b border-slate-100 bg-slate-50/50">
           <CardTitle className="text-lg text-slate-800">2. Payroll Bulan Terbaru</CardTitle>
-          <CardDescription>Tempel link folder Drive payroll. File terbaru otomatis dipilih (nama YYYY-MM menang).</CardDescription>
+          <CardDescription>Tempel link folder Drive (otomatis pakai file terbaru) atau link satu file. Pastikan dibagikan ke email login Anda.</CardDescription>
         </CardHeader>
         <CardContent className="p-6 space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="payroll-folder">Link folder Drive payroll</Label>
+            <Label htmlFor="payroll-folder">Link folder Drive payroll <span className="text-slate-400 font-normal">atau satu file spreadsheet</span></Label>
             <Input
               id="payroll-folder"
               value={payrollFolder}
               onChange={(e) => setPayrollFolder(e.target.value)}
-              placeholder="https://drive.google.com/drive/folders/..."
+              placeholder="https://drive.google.com/drive/folders/... atau .../spreadsheets/d/..."
               className="font-mono text-xs"
             />
+            <p className="text-xs text-slate-400">
+              Folder: file terbaru dipilih otomatis (nama YYYY-MM menang). File langsung: tentukan periode di bawah.
+            </p>
           </div>
+          {payrollIsFile && (
+            <div className="space-y-2">
+              <Label htmlFor="payroll-periode">Periode bulan file ini (YYYY-MM)</Label>
+              <Input id="payroll-periode" value={payrollPeriode} onChange={(e) => setPayrollPeriode(e.target.value)} placeholder="2026-09" className="font-mono" />
+            </div>
+          )}
           <Button onClick={syncPayroll} disabled={busyPayroll || !payrollFolder.trim()} className="bg-blue-600 hover:bg-blue-700">
             {busyPayroll ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
             Sync Payroll

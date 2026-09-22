@@ -2,6 +2,7 @@ import { auth } from "@/auth";
 import {
   extractSpreadsheetId,
   getSheetTabs,
+  isValidGoogleId,
   readTabValues,
 } from "@/lib/sheets";
 import { syncMasterAoa, persistSettingsForUser } from "@/lib/sync";
@@ -15,8 +16,8 @@ export async function POST(req) {
   }
   const body = await req.json().catch(() => null);
   const spreadsheetId = extractSpreadsheetId(body?.spreadsheetId || body?.sheetUrl);
-  if (!spreadsheetId) {
-    return Response.json({ error: "Link spreadsheet master wajib diisi" }, { status: 400 });
+  if (!isValidGoogleId(spreadsheetId)) {
+    return Response.json({ error: "Link master tidak valid. Tempel URL lengkap (docs.google.com/spreadsheets/d/...)." }, { status: 400 });
   }
 
   try {
