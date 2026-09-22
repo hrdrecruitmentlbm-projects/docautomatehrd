@@ -8,6 +8,7 @@ import {
   readRangeValues,
 } from "@/lib/sheets";
 import { findMasterHeaderIndex, upsertEmployees } from "@/lib/sync";
+import { supabaseEnvInfo, describeNetError, friendlyDbError } from "@/lib/supabase";
 import { mapMasterRows } from "@/lib/spreadsheet";
 
 // Diagnostics run the whole chain sequentially; give them room.
@@ -117,29 +118,65 @@ export async function GET(req) {
     const mapped = mapMasterRows(headerRow, nonEmpty);
     employees = mapped.employees;
     if (employees.length === 0) throw new Error("Mapping gagal: kolom NAMA tidak cocok.");
-    return `${nonEmpty.length} baris -> ${employees.length} karyawan (contoh: ${employees[0].nama})`;
+    return `${nonEmpty.length} baris -> ${employees.length} karyawan (contoh: ${employees[0].nama_asli})`;
   });
 
-  // 8. Database read
+  // 8b. Database config: are env vars actually set on this deployment?
+  await run("Database: konfigurasi env di server", async () => {
+    const info = supabaseEnvInfo();
+    if (info.isPlaceholder || !info.hasServiceKey) {
+      throw new Error(
+        "Env Vercel belum lengkap (NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY kosong, server memakai placeholder). Tambahkan di Project Settings > Environment Variables lalu redeploy."
+      );
+    }
+    return `target: ${info.host} (service key ada)`;
+  });
+
+  // 8c. Raw TCP/TLS reachability to Supabase, independent of supabase-js
+  await run("Database: koneksi langsung ke REST API", async () => {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!url || !key || /placeholder/i.test(url)) throw new Error("Lewati: env belum benar (lihat langkah sebelumnya).");
+    let res;
+    try {
+      res = await fetch(`${url}/rest/v1/employees?select=nama_key&limit=1`, {
+        headers: { apikey: key, authorization: `Bearer ${key}` },
+      });
+    } catch (e) {
+      throw new Error(`Gagal konek ke ${new URL(url).host}: ${describeNetError(e)}`);
+    }
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText} dari ${new URL(url).host} — cek API key / project aktif`);
+    return `HTTP ${res.status} dari ${new URL(url).host}`;
+  });
+
+  // 9. Database read
   await run("Database: baca tabel employees", async () => {
-    const { data, error, count } = await supabaseAdmin
-      .from("employees").select("nama_key", { count: "exact" }).limit(1);
-    if (error) throw new Error(`${error.message} — jalankan supabase/pkwt-v2.sql bila tabel belum ada`);
-    return `${count ?? data?.length ?? 0} baris saat ini`;
+    try {
+      const { data, error, count } = await supabaseAdmin
+        .from("employees").select("nama_key", { count: "exact" }).limit(1);
+      if (error) throw error;
+      return `${count ?? data?.length ?? 0} baris saat ini`;
+    } catch (e) {
+      throw new Error(friendlyDbError(e));
+    }
   });
 
-  // 9. Database write round-trip (synthetic row, immediately removed)
+  // 10. Database write round-trip (synthetic row, immediately removed)
   await run("Database: tulis + hapus (tes tulang punggung)", async () => {
     const probe = {
       nama_key: "__diagnosa__",
-      nama: "DIAGNOSA",
+      nama_asli: "DIAGNOSA",
       updated_at: new Date().toISOString(),
     };
-    const { error: upErr } = await supabaseAdmin
-      .from("employees").upsert(probe, { onConflict: "nama_key" });
-    if (upErr) throw new Error(`upsert gagal: ${upErr.message}`);
-    const { error: delErr } = await supabaseAdmin.from("employees").delete().eq("nama_key", "__diagnosa__");
-    if (delErr) throw new Error(`delete gagal: ${delErr.message}`);
+    try {
+      const { error: upErr } = await supabaseAdmin
+        .from("employees").upsert(probe, { onConflict: "nama_key" });
+      if (upErr) throw upErr;
+      const { error: delErr } = await supabaseAdmin.from("employees").delete().eq("nama_key", "__diagnosa__");
+      if (delErr) throw delErr;
+    } catch (e) {
+      throw new Error(friendlyDbError(e));
+    }
     return "upsert + delete OK";
   });
 
@@ -147,7 +184,11 @@ export async function GET(req) {
   // The rows written are genuine master data, so nothing to clean up here.
   if (employees.length > 0) {
     await run("Database: upsert 40 baris (durasi nyata)", async () => {
-      await upsertEmployees(employees);
+      try {
+        await upsertEmployees(employees);
+      } catch (e) {
+        throw new Error(friendlyDbError(e));
+      }
       return `${employees.length} baris terupsert (data asli, tidak perlu dihapus)`;
     });
   }
