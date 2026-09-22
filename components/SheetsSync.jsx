@@ -120,8 +120,8 @@ export function SheetsSync({ initialMasterUrl = "", initialMasterTab = "", initi
             endRow: start + CHUNK - 1,
           });
           synced += r.synced || 0;
-        } catch {
-          failedRanges.push(`baris ${start}-${start + CHUNK - 1}`);
+        } catch (e) {
+          failedRanges.push(`baris ${start}-${start + CHUNK - 1}: ${e.message || e}`);
         }
         consumed += CHUNK;
         setMasterProgress({ done: Math.min(consumed, Math.max(total, 1)), total: Math.max(total, 1) });
