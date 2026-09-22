@@ -15,6 +15,7 @@ export function SheetsSync({ initialMasterUrl = "", initialMasterTab = "", initi
   const [tab, setTab] = useState(initialMasterTab);
   const [loadingTabs, setLoadingTabs] = useState(false);
   const [busyMaster, setBusyMaster] = useState(false);
+  const [masterProgress, setMasterProgress] = useState(null);
   const [masterResult, setMasterResult] = useState(null);
 
   const [payrollFolder, setPayrollFolder] = useState(initialPayrollFolder);
@@ -48,23 +49,49 @@ export function SheetsSync({ initialMasterUrl = "", initialMasterTab = "", initi
     if (!masterUrl.trim()) return toast.error("Tempel link spreadsheet master dulu");
     setBusyMaster(true);
     setMasterResult(null);
+    setMasterProgress({ done: 0, total: 0 });
     try {
-      const res = await fetch("/api/sync-master", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sheetUrl: masterUrl.trim(), tab: tab || undefined }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Gagal sinkron master");
-      setMasterResult(data);
-      if (data.tabs) setTabs(data.tabs);
-      if (data.tab) setTab(data.tab);
-      toast.success(`${data.total} karyawan tersimpan`);
-      if (data.persistHint) toast.warning(data.persistHint);
+      const post = async (payload) => {
+        const res = await fetch("/api/sync-master", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Gagal sinkron master");
+        return data;
+      };
+      // 1. Probe: header + row count (tiny reads)
+      const probe = await post({ sheetUrl: masterUrl.trim(), tab: tab || undefined, probe: true });
+      if (probe.tabs) setTabs(probe.tabs);
+      if (probe.tab) setTab(probe.tab);
+      const CHUNK = 40;
+      let synced = 0;
+      let consumed = 0;
+      const total = probe.totalRows || 0;
+      // 2. Sync 40 rows at a time so no request can time out
+      for (let guard = 0; guard < 200; guard++) {
+        const start = probe.headerIndex + 1 + consumed;
+        const r = await post({
+          sheetUrl: masterUrl.trim(),
+          tab: probe.tab,
+          headers: probe.headerRow,
+          startRow: start,
+          endRow: start + CHUNK - 1,
+        });
+        synced += r.synced || 0;
+        consumed += CHUNK;
+        setMasterProgress({ done: Math.min(consumed, Math.max(total, 1)), total: Math.max(total, 1) });
+        // Stop at an empty window past the estimate, or one window past it.
+        if ((r.synced === 0 && consumed >= total) || consumed >= total + CHUNK) break;
+      }
+      setMasterResult({ total: synced, tab: probe.tab });
+      toast.success(`${synced} karyawan tersimpan`);
     } catch (e) {
       toast.error(e.message);
     } finally {
       setBusyMaster(false);
+      setMasterProgress(null);
     }
   };
 
@@ -128,7 +155,9 @@ export function SheetsSync({ initialMasterUrl = "", initialMasterTab = "", initi
           </div>
           <Button onClick={syncMaster} disabled={busyMaster || !masterUrl.trim()} className="bg-slate-900 hover:bg-slate-800">
             {busyMaster ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
-            Sync Master
+            {busyMaster && masterProgress && masterProgress.total > 0
+              ? `Sync... ${masterProgress.done}/${masterProgress.total}`
+              : "Sync Master"}
           </Button>
           {masterResult && (
             <div className="text-sm bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-1">
