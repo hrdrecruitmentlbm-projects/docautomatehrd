@@ -2,13 +2,12 @@ import { auth } from "@/auth";
 import {
   extractFolderId,
   extractFileId,
-  getSheetTabs,
+  extractGid,
   isValidGoogleId,
   listSpreadsheetFiles,
   pickNewestFile,
   extractPeriode,
   readDriveFileAsAoa,
-  readTabValues,
 } from "@/lib/sheets";
 import { syncPayrollAoa, persistSettingsForUser } from "@/lib/sync";
 
@@ -22,14 +21,18 @@ export async function POST(req) {
   const body = await req.json().catch(() => null);
 
   try {
-    const directId = extractFileId(body?.spreadsheetId || body?.sheetUrl || "");
+    const rawSheet = body?.spreadsheetId || body?.sheetUrl || "";
+    const directId = extractFileId(rawSheet);
     if (directId) {
       if (!isValidGoogleId(directId)) {
         return Response.json({ error: "Link file payroll tidak valid. Tempel URL lengkap." }, { status: 400 });
       }
-      const tabs = await getSheetTabs(session.accessToken, directId);
-      const tab = body?.tab && tabs.includes(body.tab) ? body.tab : tabs[0];
-      const aoa = await readTabValues(session.accessToken, directId, tab);
+      // A pasted file URL often points at a specific tab (?gid=...): honor it.
+      const { aoa, tab } = await readDriveFileAsAoa(
+        session.accessToken,
+        { id: directId, mimeType: "application/vnd.google-apps.spreadsheet" },
+        { tabTitle: body?.tab, gid: extractGid(rawSheet) }
+      );
       const periode = body?.periode_bulan || new Date().toISOString().slice(0, 7);
       const result = await syncPayrollAoa(aoa, periode);
       return Response.json({ ...result, fileUsed: { name: `Spreadsheet langsung (${tab})` } });

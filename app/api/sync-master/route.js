@@ -25,7 +25,7 @@ export async function POST(req) {
     if (tabs.length === 0) {
       return Response.json({ error: "Spreadsheet tidak punya tab." }, { status: 400 });
     }
-    const tab = body?.tab && tabs.includes(body.tab) ? body.tab : tabs[0];
+    const tab = body?.tab && tabs.some((t) => t.title === body.tab) ? body.tab : tabs[0].title;
     const aoa = await readTabValues(session.accessToken, spreadsheetId, tab);
     const result = await syncMasterAoa(aoa, tab);
 

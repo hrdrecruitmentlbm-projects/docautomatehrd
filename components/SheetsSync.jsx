@@ -11,7 +11,7 @@ import { Loader2, RefreshCw, TableProperties } from "lucide-react";
 
 export function SheetsSync({ initialMasterUrl = "", initialMasterTab = "", initialPayrollFolder = "" }) {
   const [masterUrl, setMasterUrl] = useState(initialMasterUrl);
-  const [tabs, setTabs] = useState(initialMasterTab ? [initialMasterTab] : []);
+  const [tabs, setTabs] = useState(initialMasterTab ? [{ title: initialMasterTab, sheetId: null }] : []);
   const [tab, setTab] = useState(initialMasterTab);
   const [loadingTabs, setLoadingTabs] = useState(false);
   const [busyMaster, setBusyMaster] = useState(false);
@@ -34,7 +34,8 @@ export function SheetsSync({ initialMasterUrl = "", initialMasterTab = "", initi
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Gagal membaca daftar tab");
       setTabs(data.tabs || []);
-      if (data.tabs?.length > 0 && !data.tabs.includes(tab)) setTab(data.tabs[0]);
+      const pre = data.suggestedTab || data.tabs?.[0]?.title;
+      if (pre && !data.tabs?.some((t) => t.title === tab)) setTab(pre);
       if ((data.tabs || []).length === 0) toast.warning("Spreadsheet tidak punya tab");
     } catch (e) {
       toast.error(e.message);
@@ -120,7 +121,7 @@ export function SheetsSync({ initialMasterUrl = "", initialMasterTab = "", initi
               <Select value={tab} onValueChange={setTab}>
                 <SelectTrigger><SelectValue placeholder="Pilih tab..." /></SelectTrigger>
                 <SelectContent>
-                  {tabs.map((t) => (<SelectItem key={t} value={t}>{t}</SelectItem>))}
+                  {tabs.map((t) => (<SelectItem key={t.title} value={t.title}>{t.title}</SelectItem>))}
                 </SelectContent>
               </Select>
             )}
