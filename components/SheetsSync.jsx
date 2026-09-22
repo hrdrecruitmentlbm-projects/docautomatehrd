@@ -108,6 +108,7 @@ export function SheetsSync({ initialMasterUrl = "", initialMasterTab = "", initi
       let consumed = 0;
       const failedRanges = [];
       const dupes = [];
+      const liniSet = new Set();
       const total = probe.totalRows || 0;
       // 2. Sync 40 rows at a time; a broken chunk is skipped, not fatal
       for (let guard = 0; guard < 200; guard++) {
@@ -122,6 +123,7 @@ export function SheetsSync({ initialMasterUrl = "", initialMasterTab = "", initi
           });
           synced += r.synced || 0;
           for (const d of r.duplicates || []) if (!dupes.includes(d)) dupes.push(d);
+          for (const lb of r.liniBisnis || []) liniSet.add(lb);
         } catch (e) {
           failedRanges.push(`baris ${start}-${start + CHUNK - 1}: ${e.message || e}`);
         }
@@ -138,7 +140,7 @@ export function SheetsSync({ initialMasterUrl = "", initialMasterTab = "", initi
       } catch {
         // Non-fatal: sync already succeeded.
       }
-      setMasterResult({ total: synced, tab: probe.tab, failedRanges, duplicates: dupes });
+      setMasterResult({ total: synced, tab: probe.tab, failedRanges, duplicates: dupes, distinctLiniBisnis: [...liniSet].sort() });
       if (failedRanges.length === 0) {
         toast.success(`${synced} karyawan tersimpan`);
       } else {

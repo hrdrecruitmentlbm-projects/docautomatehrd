@@ -1,5 +1,6 @@
 import { after } from "next/server";
 import { auth } from "@/auth";
+import { supabaseAdmin } from "@/lib/supabase";
 import {
   extractSpreadsheetId,
   getSheetTabs,
@@ -38,6 +39,9 @@ export async function POST(req) {
         master_sheet_url: body?.sheetUrl || body?.spreadsheetId || spreadsheetId,
         master_tab: body?.tab || null,
       });
+      // Sapu bersih sisa baris footer lama ("TOTAL") yang sempat tersimpan
+      // sebagai pegawai (cascade menghapus payroll-nya juga).
+      await supabaseAdmin.from("employees").delete().in("nama_key", ["total", "jumlah", "subtotal", "grand total"]);
       return Response.json({ saved: true, persistHint });
     }
 
@@ -79,8 +83,9 @@ export async function POST(req) {
       if (nonEmpty.length === 0) return Response.json({ synced: 0, duplicates: [] });
       const { employees } = mapMasterRows(body.headers, nonEmpty);
       const duplicates = findDuplicateNames(employees);
+      const liniBisnis = [...new Set(employees.map((e) => e.lini_bisnis).filter(Boolean))].sort();
       if (employees.length > 0) await upsertEmployees(employees);
-      return Response.json({ synced: employees.length, duplicates });
+      return Response.json({ synced: employees.length, duplicates, liniBisnis });
     }
 
     // ---- Legacy full sync (small sheets)
