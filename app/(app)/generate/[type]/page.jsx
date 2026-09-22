@@ -1,5 +1,6 @@
 import { getDocumentConfig } from "@/lib/document-configs";
 import { DynamicForm } from "@/components/DynamicForm";
+import { PkwtAutoForm } from "@/components/PkwtAutoForm";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { redirect } from "next/navigation";
@@ -20,10 +21,14 @@ export default async function GenerateDocumentPage({ params }) {
           Kembali ke Dashboard
         </Link>
         <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Buat {config.label}</h1>
-        <p className="text-slate-500 mt-1">{config.description}</p>
+        <p className="text-slate-500 mt-1">
+          {resolvedParams.type === "pkwt"
+            ? "Ketik nama karyawan — data personal, payroll, dan perusahaan terisi otomatis."
+            : config.description}
+        </p>
       </div>
 
-      <DynamicForm config={config} />
+      {resolvedParams.type === "pkwt" ? <PkwtAutoForm /> : <DynamicForm config={config} />}
     </div>
   );
 }
