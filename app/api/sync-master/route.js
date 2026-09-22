@@ -21,11 +21,16 @@ export async function POST(req) {
   }
 
   try {
-    const tabs = await getSheetTabs(session.accessToken, spreadsheetId);
-    if (tabs.length === 0) {
-      return Response.json({ error: "Spreadsheet tidak punya tab." }, { status: 400 });
+    // Tab already chosen in the UI: skip the metadata call to stay fast.
+    let tabs = null;
+    let tab = body?.tab;
+    if (!tab) {
+      tabs = await getSheetTabs(session.accessToken, spreadsheetId);
+      if (tabs.length === 0) {
+        return Response.json({ error: "Spreadsheet tidak punya tab." }, { status: 400 });
+      }
+      tab = tabs[0].title;
     }
-    const tab = body?.tab && tabs.some((t) => t.title === body.tab) ? body.tab : tabs[0].title;
     const aoa = await readTabValues(session.accessToken, spreadsheetId, tab);
     const result = await syncMasterAoa(aoa, tab);
 

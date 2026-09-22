@@ -28,11 +28,19 @@ export async function POST(req) {
         return Response.json({ error: "Link file payroll tidak valid. Tempel URL lengkap." }, { status: 400 });
       }
       // A pasted file URL often points at a specific tab (?gid=...): honor it.
-      const { aoa, tab } = await readDriveFileAsAoa(
-        session.accessToken,
-        { id: directId, mimeType: "application/vnd.google-apps.spreadsheet" },
-        { tabTitle: body?.tab, gid: extractGid(rawSheet) }
-      );
+      const gid = extractGid(rawSheet);
+      let aoa;
+      let tab;
+      if (body?.tab && gid == null) {
+        tab = body.tab;
+        aoa = await readTabValues(session.accessToken, directId, tab);
+      } else {
+        ({ aoa, tab } = await readDriveFileAsAoa(
+          session.accessToken,
+          { id: directId, mimeType: "application/vnd.google-apps.spreadsheet" },
+          { tabTitle: body?.tab, gid }
+        ));
+      }
       const periode = body?.periode_bulan || new Date().toISOString().slice(0, 7);
       const result = await syncPayrollAoa(aoa, periode);
       return Response.json({ ...result, fileUsed: { name: `Spreadsheet langsung (${tab})` } });
