@@ -13,6 +13,9 @@ import { syncMasterAoa, upsertEmployees, findMasterHeaderIndex, persistSettingsF
 
 const CHUNK_ROWS = 40;
 
+// Big-tab safety: allow the function to run longer than the default budget.
+export const maxDuration = 60;
+
 // POST /api/sync-master — three modes (chunked sync keeps big tabs fast):
 // { sheetUrl, tab?, probe: true }            -> { tab, headerRow, headerIndex, totalRows }
 // { sheetUrl, tab, headers, startRow, endRow } -> { synced } (one 40-row chunk)

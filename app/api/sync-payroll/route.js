@@ -11,6 +11,9 @@ import {
 } from "@/lib/sheets";
 import { syncPayrollAoa, persistSettingsForUser } from "@/lib/sync";
 
+// Folder listing + full read in one request: give it room on Vercel.
+export const maxDuration = 60;
+
 // POST /api/sync-payroll — body { folderUrl | folderId } or { sheetUrl | spreadsheetId, tab?, periode_bulan? }.
 // Folder mode: picks the newest payroll file automatically (YYYY-MM in name wins).
 export async function POST(req) {

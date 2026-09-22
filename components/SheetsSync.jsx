@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Loader2, RefreshCw, TableProperties } from "lucide-react";
+import { CheckCircle2, Loader2, RefreshCw, Stethoscope, TableProperties, XCircle } from "lucide-react";
 
 export function SheetsSync({ initialMasterUrl = "", initialMasterTab = "", initialPayrollFolder = "" }) {
   const [masterUrl, setMasterUrl] = useState(initialMasterUrl);
@@ -17,6 +17,8 @@ export function SheetsSync({ initialMasterUrl = "", initialMasterTab = "", initi
   const [busyMaster, setBusyMaster] = useState(false);
   const [masterProgress, setMasterProgress] = useState(null);
   const [masterResult, setMasterResult] = useState(null);
+  const [busyDiag, setBusyDiag] = useState(false);
+  const [diagSteps, setDiagSteps] = useState(null);
 
   const [payrollFolder, setPayrollFolder] = useState(initialPayrollFolder);
   const [payrollPeriode, setPayrollPeriode] = useState(() => {
@@ -45,21 +47,57 @@ export function SheetsSync({ initialMasterUrl = "", initialMasterTab = "", initi
     }
   };
 
+  const runDiagnosis = async () => {
+    if (!masterUrl.trim()) return toast.error("Tempel link spreadsheet master dulu");
+    setBusyDiag(true);
+    setDiagSteps(null);
+    try {
+      const qs = new URLSearchParams({ sheetUrl: masterUrl.trim() });
+      if (tab) qs.set("tab", tab);
+      const res = await fetch(`/api/diagnose?${qs.toString()}`);
+      const data = await res.json();
+      setDiagSteps(data.steps || []);
+      const failed = (data.steps || []).find((s) => !s.ok);
+      if (failed) toast.error(`Gagal di langkah: ${failed.name}`);
+      else toast.success("Semua langkah diagnosa lulus");
+    } catch (e) {
+      toast.error(e.message);
+    } finally {
+      setBusyDiag(false);
+    }
+  };
+
   const syncMaster = async () => {
     if (!masterUrl.trim()) return toast.error("Tempel link spreadsheet master dulu");
     setBusyMaster(true);
     setMasterResult(null);
+    setDiagSteps(null);
     setMasterProgress({ done: 0, total: 0 });
     try {
-      const post = async (payload) => {
-        const res = await fetch("/api/sync-master", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Gagal sinkron master");
-        return data;
+      // Retries a flaky network instead of aborting the whole sync.
+      const post = async (payload, attempt = 0) => {
+        try {
+          const res = await fetch("/api/sync-master", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            // 4xx = real problem (won't heal by waiting)
+            if (res.status >= 500 && attempt < 2) throw new Error("__retry__");
+            throw new Error(data.error || `Gagal sinkron master (HTTP ${res.status})`);
+          }
+          return data;
+        } catch (e) {
+          if (e.message === "__retry__" || /fetch failed|network|Failed to fetch/i.test(e.message || "")) {
+            if (attempt < 2) {
+              await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+              return post(payload, attempt + 1);
+            }
+          }
+          throw e;
+        }
       };
       // 1. Probe: header + row count (tiny reads)
       const probe = await post({ sheetUrl: masterUrl.trim(), tab: tab || undefined, probe: true });
@@ -68,25 +106,35 @@ export function SheetsSync({ initialMasterUrl = "", initialMasterTab = "", initi
       const CHUNK = 40;
       let synced = 0;
       let consumed = 0;
+      const failedRanges = [];
       const total = probe.totalRows || 0;
-      // 2. Sync 40 rows at a time so no request can time out
+      // 2. Sync 40 rows at a time; a broken chunk is skipped, not fatal
       for (let guard = 0; guard < 200; guard++) {
         const start = probe.headerIndex + 1 + consumed;
-        const r = await post({
-          sheetUrl: masterUrl.trim(),
-          tab: probe.tab,
-          headers: probe.headerRow,
-          startRow: start,
-          endRow: start + CHUNK - 1,
-        });
-        synced += r.synced || 0;
+        try {
+          const r = await post({
+            sheetUrl: masterUrl.trim(),
+            tab: probe.tab,
+            headers: probe.headerRow,
+            startRow: start,
+            endRow: start + CHUNK - 1,
+          });
+          synced += r.synced || 0;
+        } catch {
+          failedRanges.push(`baris ${start}-${start + CHUNK - 1}`);
+        }
         consumed += CHUNK;
         setMasterProgress({ done: Math.min(consumed, Math.max(total, 1)), total: Math.max(total, 1) });
         // Stop at an empty window past the estimate, or one window past it.
-        if ((r.synced === 0 && consumed >= total) || consumed >= total + CHUNK) break;
+        if (consumed >= total + CHUNK) break;
+        if (failedRanges.length > 5) break;
       }
-      setMasterResult({ total: synced, tab: probe.tab });
-      toast.success(`${synced} karyawan tersimpan`);
+      setMasterResult({ total: synced, tab: probe.tab, failedRanges });
+      if (failedRanges.length === 0) {
+        toast.success(`${synced} karyawan tersimpan`);
+      } else {
+        toast.warning(`${synced} tersimpan, tapi gagal: ${failedRanges.join(", ")}. Jalankan Sync lagi untuk ulangi bagian itu.`);
+      }
     } catch (e) {
       toast.error(e.message);
     } finally {
@@ -153,16 +201,40 @@ export function SheetsSync({ initialMasterUrl = "", initialMasterTab = "", initi
               </Select>
             )}
           </div>
-          <Button onClick={syncMaster} disabled={busyMaster || !masterUrl.trim()} className="bg-slate-900 hover:bg-slate-800">
-            {busyMaster ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
-            {busyMaster && masterProgress && masterProgress.total > 0
-              ? `Sync... ${masterProgress.done}/${masterProgress.total}`
-              : "Sync Master"}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={syncMaster} disabled={busyMaster || !masterUrl.trim()} className="bg-slate-900 hover:bg-slate-800">
+              {busyMaster ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+              {busyMaster && masterProgress && masterProgress.total > 0
+                ? `Sync... ${masterProgress.done}/${masterProgress.total}`
+                : "Sync Master"}
+            </Button>
+            <Button variant="outline" onClick={runDiagnosis} disabled={busyDiag || !masterUrl.trim()}>
+              {busyDiag ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Stethoscope className="w-4 h-4 mr-2" />}
+              Diagnosa
+            </Button>
+          </div>
           {masterResult && (
             <div className="text-sm bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-1">
               <p className="font-semibold text-slate-800">{masterResult.total} karyawan tersimpan (tab {masterResult.tab}).</p>
               <p className="text-slate-500">Lini bisnis: {masterResult.distinctLiniBisnis?.join(", ") || "-"}</p>
+              {masterResult.failedRanges?.length > 0 && (
+                <p className="text-amber-600">Gagal di: {masterResult.failedRanges.join("; ")}. Klik Sync lagi untuk ulangi.</p>
+              )}
+            </div>
+          )}
+          {diagSteps && (
+            <div className="text-xs border border-slate-200 rounded-lg divide-y divide-slate-100">
+              {diagSteps.map((s, i) => (
+                <div key={i} className="flex items-start gap-2 p-2">
+                  {s.ok
+                    ? <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                    : <XCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />}
+                  <div className="min-w-0">
+                    <p className="font-medium text-slate-700">{i + 1}. {s.name} <span className="text-slate-400 font-normal">({s.ms} ms)</span></p>
+                    <p className={`break-words ${s.ok ? "text-slate-500" : "text-red-600"}`}>{s.detail}</p>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </CardContent>
