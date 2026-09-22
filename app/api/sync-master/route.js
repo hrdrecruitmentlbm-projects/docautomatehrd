@@ -9,7 +9,7 @@ import {
   readTabValues,
 } from "@/lib/sheets";
 import { mapMasterRows } from "@/lib/spreadsheet";
-import { syncMasterAoa, upsertEmployees, findMasterHeaderIndex, persistSettingsForUser } from "@/lib/sync";
+import { syncMasterAoa, upsertEmployees, findMasterHeaderIndex, findDuplicateNames, persistSettingsForUser } from "@/lib/sync";
 
 const CHUNK_ROWS = 40;
 
@@ -32,6 +32,15 @@ export async function POST(req) {
   }
 
   try {
+    // ---- Save links only (fill once, like Template IDs): { sheetUrl, tab, saveOnly: true }
+    if (body?.saveOnly) {
+      const persistHint = await persistSettingsForUser(session.user.email, {
+        master_sheet_url: body?.sheetUrl || body?.spreadsheetId || spreadsheetId,
+        master_tab: body?.tab || null,
+      });
+      return Response.json({ saved: true, persistHint });
+    }
+
     // ---- Probe: tiny reads only (header block + first column for row count)
     if (body?.probe) {
       let tab = body?.tab;
@@ -67,10 +76,11 @@ export async function POST(req) {
         session.accessToken, spreadsheetId, `${quoteTab(tab)}!A${startRow}:AZ${endRow}`
       );
       const nonEmpty = rows.filter((r) => r.some((c) => String(c ?? "").trim() !== ""));
-      if (nonEmpty.length === 0) return Response.json({ synced: 0 });
+      if (nonEmpty.length === 0) return Response.json({ synced: 0, duplicates: [] });
       const { employees } = mapMasterRows(body.headers, nonEmpty);
+      const duplicates = findDuplicateNames(employees);
       if (employees.length > 0) await upsertEmployees(employees);
-      return Response.json({ synced: employees.length });
+      return Response.json({ synced: employees.length, duplicates });
     }
 
     // ---- Legacy full sync (small sheets)

@@ -107,6 +107,7 @@ export function SheetsSync({ initialMasterUrl = "", initialMasterTab = "", initi
       let synced = 0;
       let consumed = 0;
       const failedRanges = [];
+      const dupes = [];
       const total = probe.totalRows || 0;
       // 2. Sync 40 rows at a time; a broken chunk is skipped, not fatal
       for (let guard = 0; guard < 200; guard++) {
@@ -120,6 +121,7 @@ export function SheetsSync({ initialMasterUrl = "", initialMasterTab = "", initi
             endRow: start + CHUNK - 1,
           });
           synced += r.synced || 0;
+          for (const d of r.duplicates || []) if (!dupes.includes(d)) dupes.push(d);
         } catch (e) {
           failedRanges.push(`baris ${start}-${start + CHUNK - 1}: ${e.message || e}`);
         }
@@ -129,11 +131,21 @@ export function SheetsSync({ initialMasterUrl = "", initialMasterTab = "", initi
         if (consumed >= total + CHUNK) break;
         if (failedRanges.length > 5) break;
       }
-      setMasterResult({ total: synced, tab: probe.tab, failedRanges });
+      // 3. Save links once (like Template IDs) so next visit is pre-filled.
+      try {
+        const s = await post({ sheetUrl: masterUrl.trim(), tab: probe.tab, saveOnly: true });
+        if (s.persistHint) toast.warning(s.persistHint);
+      } catch {
+        // Non-fatal: sync already succeeded.
+      }
+      setMasterResult({ total: synced, tab: probe.tab, failedRanges, duplicates: dupes });
       if (failedRanges.length === 0) {
         toast.success(`${synced} karyawan tersimpan`);
       } else {
         toast.warning(`${synced} tersimpan, tapi gagal: ${failedRanges.join(", ")}. Jalankan Sync lagi untuk ulangi bagian itu.`);
+      }
+      if (dupes.length > 0) {
+        toast.warning(`${dupes.length} nama ganda di Sheet (disimpan 1x): ${dupes.slice(0, 5).join("; ")}${dupes.length > 5 ? "…" : ""}. Rapikan di Sheet bila perlu.`);
       }
     } catch (e) {
       toast.error(e.message);
@@ -220,6 +232,9 @@ export function SheetsSync({ initialMasterUrl = "", initialMasterTab = "", initi
               {masterResult.failedRanges?.length > 0 && (
                 <p className="text-amber-600">Gagal di: {masterResult.failedRanges.join("; ")}. Klik Sync lagi untuk ulangi.</p>
               )}
+              {masterResult.duplicates?.length > 0 && (
+                <p className="text-amber-600">Nama ganda di Sheet (tersimpan 1x): {masterResult.duplicates.slice(0, 10).join("; ")}{masterResult.duplicates.length > 10 ? ` (+${masterResult.duplicates.length - 10} lagi)` : ""}</p>
+              )}
             </div>
           )}
           {diagSteps && (
@@ -279,6 +294,9 @@ export function SheetsSync({ initialMasterUrl = "", initialMasterTab = "", initi
               )}
               {payrollResult.unmatched?.length > 0 && (
                 <p className="text-amber-600">Tidak cocok: {payrollResult.unmatched.slice(0, 10).join("; ")}{payrollResult.unmatched.length > 10 ? ` (+${payrollResult.unmatched.length - 10} lagi)` : ""}</p>
+              )}
+              {payrollResult.duplicates?.length > 0 && (
+                <p className="text-amber-600">Nama ganda di file payroll (tersimpan 1x): {payrollResult.duplicates.slice(0, 10).join("; ")}{payrollResult.duplicates.length > 10 ? ` (+${payrollResult.duplicates.length - 10} lagi)` : ""}</p>
               )}
             </div>
           )}

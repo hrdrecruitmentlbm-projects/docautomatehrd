@@ -8,6 +8,7 @@ import {
   pickNewestFile,
   extractPeriode,
   readDriveFileAsAoa,
+  readTabValues,
 } from "@/lib/sheets";
 import { syncPayrollAoa, persistSettingsForUser } from "@/lib/sync";
 
@@ -46,7 +47,11 @@ export async function POST(req) {
       }
       const periode = body?.periode_bulan || new Date().toISOString().slice(0, 7);
       const result = await syncPayrollAoa(aoa, periode);
-      return Response.json({ ...result, fileUsed: { name: `Spreadsheet langsung (${tab})` } });
+      // Save the file link too (fill once, like Template IDs).
+      const persistHint = await persistSettingsForUser(session.user.email, {
+        payroll_folder_url: rawSheet,
+      });
+      return Response.json({ ...result, fileUsed: { name: `Spreadsheet langsung (${tab})` }, persistHint });
     }
 
     const folderId = extractFolderId(body?.folderId || body?.folderUrl);
