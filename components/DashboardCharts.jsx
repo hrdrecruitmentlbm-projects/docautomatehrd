@@ -5,7 +5,15 @@ import {
   ResponsiveContainer, PieChart, Pie, Cell
 } from 'recharts';
 
-const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
+// Categorical palette from design tokens so charts and badges agree:
+// PKWT blue, SK emerald, Memo amber, SP red.
+const COLORS = [
+  'var(--chart-1)',
+  'var(--chart-2)',
+  'var(--chart-3)',
+  'var(--chart-4)',
+  'var(--chart-5)',
+];
 
 function DonutChart({ logs }) {
   const typeCounts = logs.reduce((acc, log) => {
@@ -23,14 +31,20 @@ function DonutChart({ logs }) {
 
   if (total === 0) {
     return (
-      <div className="flex items-center justify-center h-[180px] text-slate-400 text-sm">
+      <div className="flex items-center justify-center h-[180px] text-text-2 text-sm">
         Belum ada data
       </div>
     );
   }
 
+  // Screen-reader summary carries label+count (chart is aria-hidden).
+  const summary = data.map(d => `${d.name} ${d.value}`).join(', ');
+
   return (
     <div className="relative flex items-center justify-center h-[180px]">
+      <p className="sr-only">
+        Total {total} dokumen: {summary}
+      </p>
       <ResponsiveContainer width="100%" height="100%">
         <PieChart>
           <Pie
@@ -42,20 +56,21 @@ function DonutChart({ logs }) {
             paddingAngle={3}
             dataKey="value"
             strokeWidth={0}
+            aria-hidden="true"
           >
             {data.map((entry, index) => (
               <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
             ))}
           </Pie>
           <Tooltip
-            contentStyle={{ borderRadius: '10px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.08)', fontSize: '12px' }}
+            contentStyle={{ borderRadius: '8px', border: '1px solid var(--border)', boxShadow: 'var(--shadow-popover-value)', fontSize: '13px' }}
           />
         </PieChart>
       </ResponsiveContainer>
       {/* Center label */}
       <div className="absolute flex flex-col items-center pointer-events-none">
-        <span className="text-2xl font-extrabold text-slate-800">{total}</span>
-        <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Total</span>
+        <span className="text-2xl font-semibold tabular text-text-1">{total}</span>
+        <span className="text-xs font-medium text-text-2">Total</span>
       </div>
     </div>
   );
@@ -72,7 +87,7 @@ function ActivityBarChart({ logs }) {
 
   if (data.length === 0) {
     return (
-      <div className="flex items-center justify-center h-[160px] text-slate-400 text-sm">
+      <div className="flex items-center justify-center h-[160px] text-text-2 text-sm">
         Belum ada data
       </div>
     );
@@ -82,24 +97,24 @@ function ActivityBarChart({ logs }) {
     <div className="h-[160px] w-full">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} margin={{ top: 5, right: 5, left: -30, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--row-border)" />
           <XAxis
             dataKey="date"
-            tick={{ fontSize: 10, fill: '#94a3b8', fontWeight: 600 }}
+            tick={{ fontSize: 12, fill: 'var(--text-2)', fontWeight: 500 }}
             axisLine={false}
             tickLine={false}
           />
           <YAxis
-            tick={{ fontSize: 10, fill: '#94a3b8', fontWeight: 600 }}
+            tick={{ fontSize: 12, fill: 'var(--text-2)', fontWeight: 500 }}
             axisLine={false}
             tickLine={false}
             allowDecimals={false}
           />
           <Tooltip
-            contentStyle={{ borderRadius: '10px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.08)', fontSize: '12px' }}
-            cursor={{ fill: '#f8fafc' }}
+            contentStyle={{ borderRadius: '8px', border: '1px solid var(--border)', boxShadow: 'var(--shadow-popover-value)', fontSize: '13px' }}
+            cursor={{ fill: 'var(--surface-2)' }}
           />
-          <Bar dataKey="Total" fill="#bfdbfe" radius={[4, 4, 0, 0]} />
+          <Bar dataKey="Total" fill="var(--chart-1)" radius={[4, 4, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </div>

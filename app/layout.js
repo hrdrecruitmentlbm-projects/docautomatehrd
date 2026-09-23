@@ -13,7 +13,7 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body className={`${nunito.className} antialiased bg-[#e2e8f0]`}>
+      <body className={`${nunito.className} antialiased bg-background text-foreground`}>
         <Providers>
           {children}
           <Toaster position="top-right" richColors />

@@ -2,229 +2,366 @@ import { auth } from "@/auth";
 import { supabaseAdmin } from "@/lib/supabase";
 import { DashboardCharts } from "@/components/DashboardCharts";
 import Link from "next/link";
-import { FileText, FileSignature, FilePlus, Users, Plus, Clock } from "lucide-react";
+import {
+  FileText,
+  FileSignature,
+  FilePlus,
+  Users,
+  ExternalLink,
+  Inbox,
+} from "lucide-react";
+
+const DOC_TYPE_COLORS = {
+  pkwt: { tile: "bg-blue-100 text-blue-700", bar: "bg-blue-600" },
+  sk: { tile: "bg-emerald-100 text-emerald-700", bar: "bg-emerald-600" },
+  memo: { tile: "bg-amber-100 text-amber-700", bar: "bg-amber-600" },
+  sp: { tile: "bg-red-100 text-red-700", bar: "bg-red-600" },
+};
+
+const DEFAULT_COLORS = { tile: "bg-surface-3 text-text-2", bar: "bg-blue-600" };
+
+function colorsFor(type) {
+  return DOC_TYPE_COLORS[(type || "").toLowerCase()] || DEFAULT_COLORS;
+}
+
+/**
+ * Temporal quick stats — DIFFERENT fact domain from the KPI band
+ * (absolute counts) and the donut (type composition).
+ * Lives at module scope (not in the component body) because it reads the
+ * wall clock, which the React compiler forbids during render.
+ * Denominator is the visible total, stated in the label so the bar is
+ * never decoration.
+ */
+function computeQuickStats(logs, totalDocs) {
+  const now = Date.now();
+  const dayMs = 24 * 60 * 60 * 1000;
+  const countSince = (days) =>
+    logs.filter((l) => now - new Date(l.created_at).getTime() <= days * dayMs).length;
+
+  return [
+    { label: "Hari ini", count: countSince(1) },
+    { label: "7 hari terakhir", count: countSince(7) },
+    { label: "30 hari terakhir", count: countSince(30) },
+  ].map((s) => ({
+    ...s,
+    pct: totalDocs > 0 ? Math.min(100, Math.round((s.count / totalDocs) * 100)) : 0,
+  }));
+}
 
 export default async function NewDashboardPage() {
   const session = await auth();
 
-  const { data: logs } = await supabaseAdmin
-    .from('document_logs')
-    .select('*')
-    .order('created_at', { ascending: false });
+  // Bounded fetch (Phase 1): aggregates computed from a capped recent set,
+  // plus the 10 rows the table actually renders. No unbounded select('*').
+  const RECENT_CAP = 500;
+  const TABLE_ROWS = 10;
+
+  const { data: logs, error: logsError } = await supabaseAdmin
+    .from("document_logs")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(RECENT_CAP);
+
+  // Throwing here routes to error.jsx — an error must never read as empty.
+  if (logsError) {
+    throw new Error(`Gagal memuat dokumen: ${logsError.message}`);
+  }
 
   const allLogs = logs || [];
   const totalDocs = allLogs.length;
-  const pkwtCount = allLogs.filter(l => l.document_type?.toLowerCase() === 'pkwt').length;
-  const skCount = allLogs.filter(l => l.document_type?.toLowerCase() === 'sk').length;
-  const uniqueUsers = new Set(allLogs.map(l => l.user_email)).size;
+  const pkwtCount = allLogs.filter((l) => l.document_type?.toLowerCase() === "pkwt").length;
+  const skCount = allLogs.filter((l) => l.document_type?.toLowerCase() === "sk").length;
+  const uniqueUsers = new Set(allLogs.map((l) => l.user_email)).size;
 
-  const recentDocs = allLogs.slice(0, 5);
-  const tableRows = allLogs.slice(0, 4);
+  const tableRows = allLogs.slice(0, TABLE_ROWS);
 
-  const typeData = ['pkwt', 'sk', 'memo', 'sp'].map(type => ({
-    name: type.toUpperCase(),
-    value: allLogs.filter(l => l.document_type?.toLowerCase() === type).length
-  })).filter(d => d.value > 0);
+  const typeData = ["pkwt", "sk", "memo", "sp"]
+    .map((type) => ({
+      name: type.toUpperCase(),
+      value: allLogs.filter((l) => l.document_type?.toLowerCase() === type).length,
+    }))
+    .filter((d) => d.value > 0);
 
+  // KPI band — one bordered strip, 4 cells (no pastel icon tiles,
+  // no in-strip CTA: the top bar owns the primary action).
   const kpis = [
-    { label: "Total PKWT", value: pkwtCount, icon: FileSignature, color: "bg-purple-100 text-purple-600" },
-    { label: "Total SK", value: skCount, icon: FilePlus, color: "bg-blue-100 text-blue-600" },
-    { label: "Total Dokumen", value: totalDocs, icon: FileText, color: "bg-green-100 text-green-600" },
-    { label: "Pengguna Aktif", value: uniqueUsers, icon: Users, color: "bg-orange-100 text-orange-600" },
+    { label: "Total PKWT", value: pkwtCount, icon: FileSignature },
+    { label: "Total SK", value: skCount, icon: FilePlus },
+    { label: "Total Dokumen", value: totalDocs, icon: FileText },
+    { label: "Pengguna Aktif", value: uniqueUsers, icon: Users },
   ];
 
-  const docTypeColors = {
-    pkwt: 'bg-blue-100 text-blue-700',
-    sk: 'bg-emerald-100 text-emerald-700',
-    memo: 'bg-amber-100 text-amber-700',
-    sp: 'bg-red-100 text-red-700',
-  };
+  // Temporal quick stats (see computeQuickStats for fact-domain rationale)
+  const quickStats = computeQuickStats(allLogs, totalDocs);
+
+  const recentActivity = allLogs.slice(0, 5);
 
   return (
-    <div className="max-w-full">
-      {/* Page Header */}
-      <div className="flex items-center justify-between mb-8">
-        <h1 className="text-2xl font-extrabold text-slate-800 tracking-tight">Dashboard</h1>
-      </div>
-
-      {/* KPI Bar */}
-      <div className="flex items-center gap-4 mb-8 bg-white rounded-2xl px-6 py-4 shadow-sm border border-slate-100">
-        {kpis.map((kpi, i) => (
-          <div key={i} className={`flex items-center gap-3 ${i < kpis.length - 1 ? 'pr-6 border-r border-slate-100' : ''} flex-1`}>
-            <div className={`p-2.5 rounded-xl ${kpi.color}`}>
-              <kpi.icon className="w-5 h-5" />
+    <div className="space-y-6">
+      {/* KPI band: ONE bordered strip with internal hairlines (not 4 cards) */}
+      <div className="grid grid-cols-2 rounded-lg border border-border bg-surface-1 md:grid-cols-4">
+        {kpis.map((kpi) => (
+          <div
+            key={kpi.label}
+            className="border-border p-5 even:border-l nth-[3]:border-t nth-[4]:border-t nth-[3]:border-l nth-[4]:border-l md:nth-[3]:border-t-0 md:nth-[4]:border-t-0 md:nth-[2]:border-l-0 md:nth-[2]:border-t-0"
+          >
+            <div className="flex items-center gap-2 text-text-2">
+              <kpi.icon className="size-4" aria-hidden="true" />
+              <span className="text-sm font-medium">{kpi.label}</span>
             </div>
-            <div>
-              <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">{kpi.label}</p>
-              <p className="text-xl font-extrabold text-slate-800">{kpi.value}</p>
-            </div>
+            <p className="mt-2 text-2xl font-semibold tabular text-text-1">
+              {kpi.value.toLocaleString("id-ID")}
+            </p>
           </div>
         ))}
-        <Link
-          href="/input-dokumen"
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold px-5 py-2.5 rounded-xl transition-colors shadow-sm whitespace-nowrap ml-4"
-        >
-          <Plus className="w-4 h-4" />
-          New Document
-        </Link>
       </div>
 
-      {/* Main Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_260px] gap-6 mb-6">
-        {/* Pending/Recent Documents Table */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-          <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100">
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-0.5">Recent</p>
-              <h3 className="text-[15px] font-extrabold text-slate-800">Dokumen Terbaru</h3>
-            </div>
-            <Link href="/history" className="text-xs font-bold text-blue-600 hover:underline">
+      {/* Main table + right rail. Rail is side-by-side ONLY at xl (>=1280):
+          below that the table would be starved to ~420px. */}
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+        {/* Dokumen Terbaru */}
+        <section
+          aria-labelledby="recent-docs-heading"
+          className="rounded-lg border border-border bg-surface-1 overflow-hidden"
+        >
+          <div className="flex items-center justify-between px-5 py-4">
+            <h2 id="recent-docs-heading" className="text-[15px] font-semibold text-text-1">
+              Dokumen Terbaru
+            </h2>
+            <Link
+              href="/history"
+              className="text-sm font-medium text-blue-700 hover:underline"
+            >
               View All
             </Link>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="text-[11px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-50">
-                  <th className="text-left px-6 py-3 font-semibold">File Name</th>
-                  <th className="text-left px-4 py-3 font-semibold">Type</th>
-                  <th className="text-left px-4 py-3 font-semibold">Date</th>
-                  <th className="text-left px-4 py-3 font-semibold">Creator</th>
-                  <th className="text-left px-4 py-3 font-semibold">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {tableRows.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="text-center text-slate-400 py-10 text-sm">Belum ada dokumen</td>
-                  </tr>
-                ) : (
-                  tableRows.map((log) => (
-                    <tr key={log.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
-                      <td className="px-6 py-3 text-sm font-semibold text-slate-700">{log.employee_name || 'Dokumen'}</td>
-                      <td className="px-4 py-3">
-                        <span className={`text-[11px] font-bold px-2.5 py-1 rounded-lg uppercase ${docTypeColors[log.document_type?.toLowerCase()] || 'bg-slate-100 text-slate-600'}`}>
-                          {log.document_type}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-xs text-slate-400 font-medium">
-                        {new Date(log.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
-                      </td>
-                      <td className="px-4 py-3 text-xs text-slate-400 font-medium truncate max-w-[160px]">{log.user_email}</td>
-                      <td className="px-4 py-3">
-                        <a href={log.google_doc_url} target="_blank" rel="noreferrer" className="text-xs font-bold text-blue-600 hover:underline">
-                          Open
-                        </a>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
 
-        {/* Documents Summary Donut */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
-          <div className="mb-4">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-0.5">Overview</p>
-            <h3 className="text-[15px] font-extrabold text-slate-800">Documents Summary</h3>
-          </div>
-          <DashboardCharts logs={allLogs} chartType="pie" />
-          <div className="mt-4 space-y-2">
-            {typeData.map((d, i) => {
-              const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444'];
-              return (
-                <div key={i} className="flex items-center justify-between text-sm">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2.5 h-2.5 rounded-full" style={{ background: colors[i % colors.length] }}></div>
-                    <span className="font-semibold text-slate-600 uppercase text-xs">{d.name}</span>
-                  </div>
-                  <span className="font-bold text-slate-800 text-xs">{d.value}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* Bottom Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr_1fr] gap-6">
-        {/* Recent Documents List */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
-          <div className="mb-4">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-0.5">Recent</p>
-            <h3 className="text-[15px] font-extrabold text-slate-800">Dokumen Saya</h3>
-          </div>
-          <div className="space-y-3">
-            {recentDocs.filter(l => l.user_email === session?.user?.email).slice(0, 4).length === 0 ? (
-              <p className="text-sm text-slate-400 py-4 text-center">Anda belum membuat dokumen</p>
-            ) : (
-              recentDocs.filter(l => l.user_email === session?.user?.email).slice(0, 4).map((log) => (
-                <a key={log.id} href={log.google_doc_url} target="_blank" rel="noreferrer" className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-slate-50 transition-colors group">
-                  <div className={`p-2 rounded-lg ${docTypeColors[log.document_type?.toLowerCase()] || 'bg-slate-100 text-slate-600'}`}>
-                    <FileText className="w-4 h-4" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[13px] font-bold text-slate-700 truncate group-hover:text-blue-600 transition-colors">{log.employee_name || 'Dokumen'}</p>
-                    <p className="text-[11px] text-slate-400 font-medium">
-                      {new Date(log.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: 'short' })}
-                    </p>
-                  </div>
-                </a>
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* Recent Activities */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-0.5">Timeline</p>
-              <h3 className="text-[15px] font-extrabold text-slate-800">Recent Activities</h3>
-            </div>
-            <Link href="/history" className="text-xs font-bold text-blue-600 hover:underline">View All</Link>
-          </div>
-          <div className="space-y-4">
-            {allLogs.slice(0, 4).map((log, i) => (
-              <div key={log.id} className="flex items-start gap-3">
-                <div className="flex flex-col items-center">
-                  <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
-                    <FileText className="w-3.5 h-3.5 text-blue-600" />
-                  </div>
-                  {i < 3 && <div className="w-px h-6 bg-slate-100 mt-1"></div>}
-                </div>
-                <div className="flex-1 min-w-0 pt-0.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-[13px] font-bold text-slate-700">Dokumen Dibuat</p>
-                    <p className="text-[10px] text-slate-400 font-medium flex items-center gap-1 whitespace-nowrap">
-                      <Clock className="w-2.5 h-2.5" />
-                      {new Date(log.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: 'short' })}
-                    </p>
-                  </div>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
-                    <span className="font-semibold text-slate-500">{log.user_email?.split('@')[0]}</span> membuat <span className="font-semibold text-blue-600 uppercase">{log.document_type}</span> untuk <span className="font-semibold">{log.employee_name || '—'}</span>
-                  </p>
-                </div>
+          {tableRows.length === 0 ? (
+            /* Teaching empty state, not "nothing here" */
+            <div className="flex flex-col items-center justify-center px-6 py-14 text-center">
+              <div className="mb-4 flex size-12 items-center justify-center rounded-full bg-surface-2">
+                <Inbox className="size-6 text-text-2" aria-hidden="true" />
               </div>
-            ))}
-            {allLogs.length === 0 && (
-              <p className="text-sm text-slate-400 py-4 text-center">Belum ada aktivitas</p>
-            )}
-          </div>
-        </div>
-
-        {/* Analysis Bar Chart */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-0.5">Chart</p>
-              <h3 className="text-[15px] font-extrabold text-slate-800">Analysis</h3>
+              <h3 className="mb-1 text-sm font-semibold text-text-1">Belum ada dokumen</h3>
+              <p className="mb-5 text-sm text-text-2">
+                Buat dokumen pertama Anda untuk mulai melacak riwayat.
+              </p>
+              <Link
+                href="/input-dokumen"
+                className="inline-flex h-9 items-center gap-1.5 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 active:translate-y-px"
+              >
+                Buat dokumen pertama
+              </Link>
             </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <caption className="sr-only">
+                  Daftar 10 dokumen terbaru beserta jenis, tanggal, dan pembuatnya.
+                </caption>
+                <thead>
+                  <tr className="border-b border-border text-xs font-medium text-text-2">
+                    <th scope="col" className="px-5 py-2.5 text-left">Nama</th>
+                    <th scope="col" className="px-4 py-2.5 text-left">Jenis</th>
+                    <th scope="col" className="px-4 py-2.5 text-left">Tanggal</th>
+                    <th scope="col" className="hidden px-4 py-2.5 text-left md:table-cell">
+                      Pembuat
+                    </th>
+                    <th scope="col" className="px-4 py-2.5 text-right">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tableRows.map((log) => {
+                    const type = (log.document_type || "").toLowerCase();
+                    const colors = colorsFor(type);
+                    return (
+                      <tr
+                        key={log.id}
+                        className="border-b border-row-border transition-colors last:border-b-0 hover:bg-surface-0"
+                      >
+                        <td className="px-5 py-2.5">
+                          <div className="flex items-center gap-3">
+                            <span
+                              className={`flex size-7 shrink-0 items-center justify-center rounded-md ${colors.tile}`}
+                              aria-hidden="true"
+                            >
+                              <FileText className="size-4" />
+                            </span>
+                            <span className="min-w-0">
+                              <span className="block truncate font-medium text-text-1">
+                                {log.employee_name || "Dokumen"}
+                              </span>
+                              {/* Meta restacks below md where columns 2-4 hide */}
+                              <span className="block truncate text-xs text-text-2 md:hidden">
+                                {log.document_type?.toUpperCase()} ·{" "}
+                                {new Date(log.created_at).toLocaleDateString("id-ID", {
+                                  day: "2-digit",
+                                  month: "short",
+                                  year: "numeric",
+                                })}
+                              </span>
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-2.5">
+                          <span
+                            className={`inline-flex h-5 items-center rounded-full px-2 text-xs font-medium ${colors.tile}`}
+                          >
+                            {log.document_type?.toUpperCase()}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2.5 tabular text-text-2">
+                          <time dateTime={log.created_at}>
+                            {new Date(log.created_at).toLocaleDateString("id-ID", {
+                              day: "2-digit",
+                              month: "short",
+                              year: "numeric",
+                            })}
+                          </time>
+                        </td>
+                        <td className="hidden max-w-[180px] truncate px-4 py-2.5 text-text-2 md:table-cell">
+                          {log.user_email}
+                        </td>
+                        <td className="px-4 py-2.5 text-right">
+                          <a
+                            href={log.google_doc_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex size-9 items-center justify-center rounded-md text-text-2 transition-colors hover:bg-surface-2 hover:text-text-1 md:size-8"
+                            aria-label={`Buka ${log.employee_name || "dokumen"} di Google Docs`}
+                          >
+                            <ExternalLink className="size-4" aria-hidden="true" />
+                          </a>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        {/* Right rail: ONE bordered panel, hairline-divided sections */}
+        <aside className="space-y-4 xl:space-y-0">
+          <div className="rounded-lg border border-border bg-surface-1">
+            {/* 1. Documents Summary (type composition) */}
+            <section aria-labelledby="summary-heading" className="border-b border-border p-5">
+              <h2 id="summary-heading" className="mb-3 text-[15px] font-semibold text-text-1">
+                Documents Summary
+              </h2>
+              <DashboardCharts logs={allLogs} chartType="pie" />
+              <ul className="mt-2 space-y-0.5">
+                {typeData.map((d, i) => {
+                  const colors = [ "bg-blue-600", "bg-emerald-600", "bg-amber-600", "bg-red-600" ];
+                  const pct = totalDocs > 0 ? Math.round((d.value / totalDocs) * 100) : 0;
+                  return (
+                    <li key={d.name} className="flex h-8 items-center gap-2">
+                      <span
+                        className={`size-2 shrink-0 rounded-sm ${colors[i % colors.length]}`}
+                        aria-hidden="true"
+                      />
+                      <span className="flex-1 text-sm font-medium text-text-1">{d.name}</span>
+                      <span className="text-sm font-semibold tabular text-text-1">{d.value}</span>
+                      <span className="w-10 text-right text-xs tabular text-text-2">
+                        {pct}%
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+
+            {/* 2. Quick stats — temporal share of the visible total */}
+            <section aria-labelledby="quick-stats-heading" className="border-b border-border p-5">
+              <h2 id="quick-stats-heading" className="mb-3 text-[15px] font-semibold text-text-1">
+                Quick Stats
+              </h2>
+              <p className="mb-3 text-xs text-text-2">
+                {totalDocs.toLocaleString("id-ID")} dokumen (30 hari terakhir)
+              </p>
+              <ul className="space-y-3.5">
+                {quickStats.map((s) => (
+                  <li key={s.label}>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-text-2">{s.label}</span>
+                      <span className="font-semibold tabular text-text-1">{s.count}</span>
+                    </div>
+                    {/* Bar is aria-hidden: the number is the truth (color-not-only) */}
+                    <div
+                      className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-surface-3"
+                      aria-hidden="true"
+                    >
+                      <div
+                        className="h-full rounded-full bg-blue-600 transition-all"
+                        style={{ width: `${s.pct}%` }}
+                      />
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </section>
+
+            {/* 3. Recent activity */}
+            <section aria-labelledby="activity-heading" className="p-5">
+              <div className="mb-3 flex items-center justify-between">
+                <h2 id="activity-heading" className="text-[15px] font-semibold text-text-1">
+                  Recent Activity
+                </h2>
+                <Link
+                  href="/history"
+                  className="text-sm font-medium text-blue-700 hover:underline"
+                >
+                  View All
+                </Link>
+              </div>
+              {recentActivity.length === 0 ? (
+                <p className="py-4 text-center text-sm text-text-2">Belum ada aktivitas</p>
+              ) : (
+                <ol className="space-y-4">
+                  {recentActivity.map((log, i) => (
+                    <li key={log.id} className="flex items-start gap-3">
+                      <div className="flex flex-col items-center">
+                        <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-[11px] font-semibold text-blue-700">
+                          {(log.user_email || "?").charAt(0).toUpperCase()}
+                        </span>
+                        {i < recentActivity.length - 1 && (
+                          <span className="mt-1 w-px flex-1 bg-border" aria-hidden="true" />
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1 pt-0.5">
+                        <a
+                          href={log.google_doc_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="block truncate text-sm font-medium text-text-1 hover:text-blue-700"
+                        >
+                          {log.employee_name || "Dokumen"}
+                        </a>
+                        <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-text-2">
+                          <span>{log.user_email?.split("@")[0]}</span>
+                          <span aria-hidden="true">·</span>
+                          <span className="uppercase">
+                            {log.document_type}
+                          </span>
+                          <time dateTime={log.created_at} className="tabular">
+                            {new Date(log.created_at).toLocaleDateString("id-ID", {
+                              day: "2-digit",
+                              month: "short",
+                            })}
+                          </time>
+                        </p>
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </section>
+
+            {/* 4. Chart slot reserved for Phase 2 — renders nothing now
+                (an empty placeholder box teaches nothing). */}
           </div>
-          <DashboardCharts logs={allLogs} chartType="bar" />
-        </div>
+        </aside>
       </div>
     </div>
   );

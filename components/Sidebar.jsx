@@ -3,71 +3,159 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, FilePlus, History, Settings, LogOut, Database } from "lucide-react";
-import { signOut } from "next-auth/react";
+import {
+  LayoutDashboard,
+  FilePlus,
+  Database,
+  History,
+  Settings,
+  X,
+} from "lucide-react";
 
-const navItems = [
-  { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-  { href: "/input-dokumen", icon: FilePlus, label: "Documents" },
-  { href: "/data", icon: Database, label: "Data Karyawan" },
-  { href: "/history", icon: History, label: "Activity" },
-  { href: "/settings", icon: Settings, label: "Settings" },
+/**
+ * Nav groups (locked labels: EN nav / ID pages).
+ * match lets /generate/[type] light up "Documents" (child flow of
+ * Documents, not its own destination).
+ */
+const NAV_GROUPS = [
+  {
+    label: "Menu",
+    items: [
+      { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard", match: ["/dashboard"] },
+      { href: "/input-dokumen", icon: FilePlus, label: "Documents", match: ["/input-dokumen", "/generate"] },
+      { href: "/data", icon: Database, label: "Data Karyawan", match: ["/data"] },
+      { href: "/history", icon: History, label: "Activity", match: ["/history"] },
+    ],
+  },
+  {
+    label: "General",
+    items: [
+      { href: "/settings", icon: Settings, label: "Settings", match: ["/settings"] },
+    ],
+  },
 ];
 
-export function Sidebar({ user }) {
+function SidebarContent({ onNavigate, onClose }) {
   const pathname = usePathname();
 
+  const isActive = (match) =>
+    match.some((m) =>
+      m === "/dashboard" ? pathname === m : pathname.startsWith(m)
+    );
+
   return (
-    <aside className="w-[280px] bg-white text-slate-500 min-h-full flex flex-col border-r border-slate-100/50 relative py-8">
-      {/* Profile Section */}
-      <div className="flex flex-col items-center justify-center mb-10 px-6">
-        <div className="relative mb-4">
-          {user?.image ? (
-            <img src={user.image} alt="User" className="w-[88px] h-[88px] rounded-[2rem] shadow-sm border-[3px] border-white ring-[3px] ring-blue-50 object-cover" />
-          ) : (
-            <div className="w-[88px] h-[88px] rounded-[2rem] bg-blue-50 flex items-center justify-center text-blue-600 text-3xl font-bold shadow-sm border-[3px] border-white ring-[3px] ring-blue-50">
-              {user?.name?.charAt(0) || "U"}
-            </div>
-          )}
-        </div>
-        <h3 className="font-bold text-slate-800 text-lg tracking-tight">{user?.name || "User Name"}</h3>
-        <p className="text-[11px] font-semibold text-slate-400 mt-0.5 uppercase tracking-wider flex items-center">
-          HR Department
-        </p>
+    <div className="flex h-full flex-col">
+      {/* Logo row */}
+      <div className="flex h-12 shrink-0 items-center gap-2.5 px-3">
+        <span
+          className="flex size-7 items-center justify-center rounded-md bg-blue-600 text-white"
+          aria-hidden="true"
+        >
+          <FilePlus className="size-4" />
+        </span>
+        <span className="text-[15px] font-semibold tracking-[-0.01em] text-text-1">
+          DocAuto HR
+        </span>
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            className="ml-auto flex size-9 items-center justify-center rounded-md text-text-2 hover:bg-surface-2 hover:text-text-1 lg:hidden"
+            aria-label="Tutup navigasi"
+          >
+            <X className="size-5" />
+          </button>
+        )}
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 px-4 space-y-1.5">
-        {navItems.map((item) => {
-          const isActive = pathname.startsWith(item.href);
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "flex items-center space-x-4 px-6 py-3.5 rounded-2xl transition-all font-bold text-[13px] relative overflow-hidden",
-                isActive 
-                  ? "text-blue-600 bg-blue-50/50 before:absolute before:left-0 before:top-2 before:bottom-2 before:w-1.5 before:bg-blue-600 before:rounded-r-full" 
-                  : "text-slate-500 hover:bg-slate-50 hover:text-slate-700"
-              )}
-            >
-              <item.icon className={cn("h-[18px] w-[18px]", isActive ? "text-blue-600" : "text-slate-400")} />
-              <span>{item.label}</span>
-            </Link>
-          );
-        })}
+      {/* Nav groups */}
+      <nav aria-label="Main" className="flex-1 space-y-5 overflow-y-auto px-3 py-3">
+        {NAV_GROUPS.map((group) => (
+          <div key={group.label}>
+            <p className="mb-1 px-3 text-xs font-medium text-text-2">{group.label}</p>
+            <div className="space-y-0.5">
+              {group.items.map((item) => {
+                const active = isActive(item.match);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={onNavigate}
+                    aria-current={active ? "page" : undefined}
+                    className={cn(
+                      // Drawer needs 44px touch targets; desktop rail uses 36px
+                      "flex min-h-11 items-center gap-2.5 rounded-md px-3 text-sm font-medium transition-colors lg:min-h-9",
+                      active
+                        ? "bg-blue-600/10 text-blue-700"
+                        : "text-text-2 hover:bg-surface-2 hover:text-text-1"
+                    )}
+                  >
+                    <item.icon
+                      className={cn(
+                        "size-4 shrink-0",
+                        active ? "text-blue-700" : "text-text-2"
+                      )}
+                    />
+                    <span className="truncate">{item.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </nav>
-      
-      {/* Logout */}
-      <div className="px-6 mt-auto">
-        <button
-          onClick={() => signOut()}
-          className="flex items-center space-x-4 text-slate-400 hover:text-red-500 transition-colors font-bold text-[13px] px-6 py-3 w-full"
-        >
-          <LogOut className="h-[18px] w-[18px]" />
-          <span>Log Out</span>
-        </button>
-      </div>
+
+      {/* Bottom card slot intentionally renders nothing (locked decision).
+          Log Out lives in the top-bar avatar menu only. */}
+      <div className="mt-auto" />
+    </div>
+  );
+}
+
+/**
+ * Static sidebar, >= lg (a plain nav landmark, never a dialog).
+ * No avatar block: it moved to the top bar's avatar menu.
+ */
+export function Sidebar() {
+  return (
+    <aside
+      id="app-sidebar"
+      className="sticky top-0 hidden h-dvh w-[240px] shrink-0 overflow-y-auto border-r border-border bg-surface-1 lg:block"
+    >
+      <SidebarContent />
     </aside>
+  );
+}
+
+/**
+ * Drawer variant below lg.
+ * Focus trap + Escape + scroll lock + focus restore live in the shell
+ * (AppShell.jsx), which owns the drawer state machine.
+ */
+export function SidebarDrawer({ open, onClose, panelRef }) {
+  return (
+    <div className={cn("lg:hidden", open ? "" : "pointer-events-none")} aria-hidden={!open}>
+      {/* Scrim: 45% black (within the 40-60% legibility rule) */}
+      <div
+        onClick={onClose}
+        className={cn(
+          "fixed inset-0 z-(--z-scrim) bg-black/45 transition-opacity duration-200",
+          open ? "opacity-100" : "opacity-0"
+        )}
+      />
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Navigasi"
+        tabIndex={-1}
+        className={cn(
+          "fixed inset-y-0 left-0 z-(--z-drawer) w-[280px] max-w-[85vw] overflow-y-auto bg-surface-1 shadow-dialog",
+          open ? "drawer-enter translate-x-0" : "drawer-exit -translate-x-full"
+        )}
+      >
+        <SidebarContent onNavigate={onClose} onClose={onClose} />
+      </div>
+    </div>
   );
 }
