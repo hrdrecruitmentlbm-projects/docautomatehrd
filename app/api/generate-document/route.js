@@ -1,7 +1,7 @@
 import { auth } from "@/auth";
 import { supabase, supabaseAdmin } from "@/lib/supabase";
 import { getDocumentConfig } from "@/lib/document-configs";
-import { copyTemplate, replacePlaceholders, buildDocUrl } from "@/lib/google";
+import { copyTemplate, replacePlaceholders, buildDocUrl, insertKopImage } from "@/lib/google";
 import { generateDocumentNumber } from "@/lib/auto-numbering";
 import { resolveCompany, buildPkwtReplacements, addMonths, formatTanggalId } from "@/lib/pkwt";
 
@@ -203,6 +203,18 @@ async function handlePkwtAuto({ session, settings, employeeKey, manual = {} }) {
   const fileName = `${documentNumber.replace(/\//g, "_")} - ${displayName}`;
   const docId = await copyTemplate(session.accessToken, templateId, fileName, folderId);
   await replacePlaceholders(session.accessToken, docId, replacements);
+
+  // KOP otomatis: sisipkan gambar perusahaan di tanda {{kop}}, lalu hapus tanda.
+  let kop = { inserted: false, note: "" };
+  try {
+    kop = await insertKopImage(session.accessToken, docId, {
+      companyCode: hasKop ? companyCode : "",
+      hasKop,
+    });
+  } catch (e) {
+    kop = { inserted: false, note: `KOP gagal diproses: ${e.message}` };
+  }
+
   const docUrl = buildDocUrl(docId);
 
   const formSnapshot = {
@@ -252,5 +264,7 @@ async function handlePkwtAuto({ session, settings, employeeKey, manual = {} }) {
     companyCode: numberingCode,
     hasKop,
     needsManualKop: !hasKop,
+    kopInserted: kop.inserted,
+    kopNote: kop.note,
   });
 }

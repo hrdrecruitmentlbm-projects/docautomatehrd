@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { FileDown, Loader2, Search, TriangleAlert } from "lucide-react";
+import { CheckCircle2, FileDown, Loader2, Search, TriangleAlert } from "lucide-react";
 import { formatRp, formatTanggalId, addMonths } from "@/lib/pkwt";
 
 function todayISO() {
@@ -129,6 +129,14 @@ export function PkwtAutoForm() {
               <p className="text-amber-700 text-sm mt-2 flex items-start gap-1.5">
                 <TriangleAlert className="w-4 h-4 mt-0.5 shrink-0" />
                 Lini bisnis ini belum punya KOP — dokumen memakai template generik. Buka dokumen lalu sisipkan gambar KOP secara manual.
+              </p>
+            )}
+            {!result.needsManualKop && result.kopNote && (
+              <p className={`text-sm mt-2 flex items-start gap-1.5 ${result.kopInserted ? "text-emerald-700" : "text-amber-700"}`}>
+                {result.kopInserted
+                  ? <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0" />
+                  : <TriangleAlert className="w-4 h-4 mt-0.5 shrink-0" />}
+                {result.kopNote}
               </p>
             )}
           </div>
