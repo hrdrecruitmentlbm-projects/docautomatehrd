@@ -21,11 +21,8 @@ export default async function SettingsPage() {
 
   return (
     <div className="max-w-4xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Pengaturan</h1>
-        <p className="text-slate-500 mt-1">Konfigurasi template dokumen dan preferensi akun Anda.</p>
-      </div>
-
+      {/* headerMode: "shell" — TopBar owns the single <h1>. Section headings
+          (h2) are added when the form gets its step-7 rework. */}
       <SettingsForm initialSettings={initialSettings} />
     </div>
   );
