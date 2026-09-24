@@ -20,10 +20,12 @@ export default async function SettingsPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto">
-      {/* headerMode: "shell" — TopBar owns the single <h1>. Section headings
-          (h2) are added when the form gets its step-7 rework. */}
-      <SettingsForm initialSettings={initialSettings} />
+    <div className="max-w-4xl">
+      {/* headerMode: "shell" — TopBar owns the single <h1>. The form renders
+          real h2/h3 section headings under it (one hierarchy, no skips). */}
+      <div className="overflow-hidden rounded-lg border border-border bg-surface-1">
+        <SettingsForm initialSettings={initialSettings} />
+      </div>
     </div>
   );
 }

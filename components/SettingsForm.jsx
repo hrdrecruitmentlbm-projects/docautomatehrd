@@ -5,14 +5,29 @@ import { useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { documentConfigs } from "@/lib/document-configs";
 import { toast } from "sonner";
 import { Save, Loader2 } from "lucide-react";
 
+// Per-type marker dots, bound to the shared doc-type palette
+// (agrees with badges, donut cells, legend dots, folder strip).
+const DOT_COLORS = {
+  pkwt: "bg-primary",
+  sk: "bg-amber-600",
+  memo: "bg-slate-500",
+  sp: "bg-red-600",
+};
+
+/**
+ * Settings: one panel, two hairline sections (rendered by the page), real
+ * h2/h3 headings (fixes the old h1->h4 hierarchy skip), sticky save bar
+ * that scrolls with content (never covers the shell), dirty-gated save and
+ * a persistent "Tersimpan" indicator. Toast = save outcome only.
+ */
 export function SettingsForm({ initialSettings = {} }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { register, handleSubmit } = useForm({ defaultValues: initialSettings });
+  const [savedAt, setSavedAt] = useState(null);
+  const { register, handleSubmit, formState: { isDirty } } = useForm({ defaultValues: initialSettings });
 
   const onSubmit = async (data) => {
     setIsSubmitting(true);
@@ -24,7 +39,8 @@ export function SettingsForm({ initialSettings = {} }) {
       });
 
       if (!response.ok) throw new Error("Gagal menyimpan pengaturan");
-      
+
+      setSavedAt(new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }));
       toast.success("Pengaturan berhasil disimpan!");
     } catch (error) {
       toast.error(error.message);
@@ -34,67 +50,86 @@ export function SettingsForm({ initialSettings = {} }) {
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-      <Card className="border-slate-200 shadow-sm">
-        <CardHeader className="border-b border-slate-100 bg-slate-50/50 pb-4">
-          <CardTitle className="text-lg text-slate-800">Pengaturan Umum</CardTitle>
-          <CardDescription>Atur penandatangan default untuk semua dokumen.</CardDescription>
-        </CardHeader>
-        <CardContent className="p-6 space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-2">
-              <Label htmlFor="signatory_name">Nama Penandatangan (Default)</Label>
-              <Input id="signatory_name" {...register('signatory_name')} placeholder="Cth: Budi Santoso" />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="signatory_title">Jabatan Penandatangan (Default)</Label>
-              <Input id="signatory_title" {...register('signatory_title')} placeholder="Cth: HR Manager" />
-            </div>
+    <form onSubmit={handleSubmit(onSubmit)} className="flex min-h-full flex-col">
+      {/* Section: Umum */}
+      <section aria-labelledby="settings-umum" className="p-5 sm:p-6">
+        <h2 id="settings-umum" className="text-[15px] font-semibold text-text-1">
+          Pengaturan Umum
+        </h2>
+        <p className="mt-1 text-sm text-text-2">
+          Atur penandatangan default untuk semua dokumen.
+        </p>
+        <div className="mt-4 grid grid-cols-1 gap-6 md:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="signatory_name">Nama Penandatangan (Default)</Label>
+            <Input id="signatory_name" {...register('signatory_name')} placeholder="Cth: Budi Santoso" className="h-10" />
           </div>
-        </CardContent>
-      </Card>
+          <div className="space-y-1.5">
+            <Label htmlFor="signatory_title">Jabatan Penandatangan (Default)</Label>
+            <Input id="signatory_title" {...register('signatory_title')} placeholder="Cth: HR Manager" className="h-10" />
+          </div>
+        </div>
+      </section>
 
-      <Card className="border-slate-200 shadow-sm">
-        <CardHeader className="border-b border-slate-100 bg-slate-50/50 pb-4">
-          <CardTitle className="text-lg text-slate-800">Template & Folder Google Drive</CardTitle>
-          <CardDescription>
-            Ambil ID dari URL Google Drive: <code className="text-xs bg-slate-200 px-1 py-0.5 rounded text-primary">docs.google.com/document/d/INI_ID_NYA/edit</code>
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="p-6 space-y-8">
+      {/* Section: Template & Folder */}
+      <section aria-labelledby="settings-template" className="border-t border-border p-5 sm:p-6">
+        <h2 id="settings-template" className="text-[15px] font-semibold text-text-1">
+          Template &amp; Folder Google Drive
+        </h2>
+        <p className="mt-1 text-sm text-text-2">
+          Ambil ID dari URL Google Drive:{" "}
+          <code className="rounded bg-surface-3 px-1 py-0.5 font-mono text-xs text-text-1">
+            docs.google.com/document/d/INI_ID_NYA/edit
+          </code>
+        </p>
+
+        <div className="mt-4 space-y-6">
           {documentConfigs.map(config => (
-            <div key={config.id} className="pt-4 first:pt-0 border-t first:border-0 border-slate-100">
-              <h4 className="font-semibold text-slate-700 mb-4 flex items-center">
-                <div className={`w-2 h-2 rounded-full mr-2 bg-primary`}></div>
+            <div key={config.id} className="border-t border-border pt-5 first:border-t-0 first:pt-0">
+              <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-text-1">
+                <span
+                  className={`size-2 rounded-full ${DOT_COLORS[config.id] || "bg-surface-3"}`}
+                  aria-hidden="true"
+                />
                 Konfigurasi {config.label}
-              </h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
+              </h3>
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                <div className="space-y-1.5">
                   <Label htmlFor={`${config.id}_template_id`}>Template ID (Google Doc)</Label>
-                  <Input 
-                    id={`${config.id}_template_id`} 
-                    {...register(`${config.id}_template_id`)} 
-                    placeholder="Masukkan ID Template" 
-                    className="font-mono text-sm"
+                  <Input
+                    id={`${config.id}_template_id`}
+                    {...register(`${config.id}_template_id`)}
+                    placeholder="Masukkan ID Template"
+                    className="h-10 font-mono text-sm"
                   />
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   <Label htmlFor={`${config.id}_folder_id`}>Target Folder ID (Google Drive)</Label>
-                  <Input 
-                    id={`${config.id}_folder_id`} 
-                    {...register(`${config.id}_folder_id`)} 
-                    placeholder="Masukkan ID Folder" 
-                    className="font-mono text-sm"
+                  <Input
+                    id={`${config.id}_folder_id`}
+                    {...register(`${config.id}_folder_id`)}
+                    placeholder="Masukkan ID Folder"
+                    className="h-10 font-mono text-sm"
                   />
                 </div>
               </div>
             </div>
           ))}
-        </CardContent>
-      </Card>
+        </div>
+      </section>
 
-      <div className="flex justify-end">
-        <Button type="submit" disabled={isSubmitting} className="min-w-[150px] bg-slate-900 hover:bg-slate-800">
+      {/* Sticky save bar: scrolls within content, below the sticky top bar */}
+      <div className="sticky bottom-0 mt-auto flex items-center justify-end gap-3 border-t border-border bg-surface-1 px-5 py-4 sm:px-6">
+        {savedAt && !isDirty && (
+          <p role="status" className="text-sm text-primary">
+            Tersimpan {savedAt}
+          </p>
+        )}
+        <Button
+          type="submit"
+          disabled={isSubmitting || !isDirty}
+          className="h-10 min-w-[160px]"
+        >
           {isSubmitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
           Simpan Pengaturan
         </Button>
