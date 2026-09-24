@@ -14,17 +14,17 @@ export default async function HistoryPage() {
     .order('created_at', { ascending: false })
     .limit(50);
 
+  // error != empty: a failed query must route to error.jsx, never render
+  // as "Belum ada riwayat".
   if (error) {
-    console.error("Error fetching history:", error);
+    throw new Error(`Gagal memuat riwayat: ${error.message}`);
   }
 
   return (
     <div className="max-w-5xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Riwayat Dokumen</h1>
-        <p className="text-slate-500 mt-1">Daftar dokumen yang telah Anda buat sebelumnya.</p>
-      </div>
-
+      {/* headerMode: "shell" — TopBar owns the single <h1> + subtitle.
+          Scope note: this table is PERSONAL (eq user_email); dashboard and
+          search are global. The shell subtitle carries that framing. */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
         {(!logs || logs.length === 0) ? (
           <div className="p-12 flex flex-col items-center justify-center text-center">
