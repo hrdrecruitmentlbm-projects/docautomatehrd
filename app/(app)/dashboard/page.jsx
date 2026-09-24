@@ -9,6 +9,7 @@ import {
   Users,
   ExternalLink,
   Inbox,
+  CalendarDays,
 } from "lucide-react";
 
 const DOC_TYPE_COLORS = {
@@ -25,27 +26,42 @@ function colorsFor(type) {
 }
 
 /**
- * Temporal quick stats — DIFFERENT fact domain from the KPI band
- * (absolute counts) and the donut (type composition).
- * Lives at module scope (not in the component body) because it reads the
- * wall clock, which the React compiler forbids during render.
- * Denominator is the visible total, stated in the label so the bar is
- * never decoration.
+ * Temporal stats with NON-OVERLAPPING fact domains (R2/dedup):
+ * - monthCount: KPI "Bulan ini" (absolute, calendar-month window)
+ * - hariIni: share of the loaded total (bar = pct)
+ * - avg30: daily mean over 30 days (no bar — a mean has no share)
+ * - count7: headline total for the rail's 7-day bar chart (the chart owns
+ *   the daily breakdown, so no stat row repeats it)
+ * Module scope: reads the wall clock (the React compiler forbids that
+ * during render).
  */
-function computeQuickStats(logs, totalDocs) {
+function computeTemporalStats(logs, totalDocs) {
   const now = Date.now();
   const dayMs = 24 * 60 * 60 * 1000;
   const countSince = (days) =>
     logs.filter((l) => now - new Date(l.created_at).getTime() <= days * dayMs).length;
 
-  return [
-    { label: "Hari ini", count: countSince(1) },
-    { label: "7 hari terakhir", count: countSince(7) },
-    { label: "30 hari terakhir", count: countSince(30) },
-  ].map((s) => ({
-    ...s,
-    pct: totalDocs > 0 ? Math.min(100, Math.round((s.count / totalDocs) * 100)) : 0,
-  }));
+  const monthStart = new Date();
+  monthStart.setDate(1);
+  monthStart.setHours(0, 0, 0, 0);
+  const monthCount = logs.filter(
+    (l) => new Date(l.created_at).getTime() >= monthStart.getTime()
+  ).length;
+
+  const hariIni = countSince(1);
+  const avg30raw = countSince(30) / 30;
+
+  return {
+    monthCount,
+    hariIni,
+    hariIniPct:
+      totalDocs > 0 ? Math.min(100, Math.round((hariIni / totalDocs) * 100)) : 0,
+    avg30: avg30raw.toLocaleString("id-ID", {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    }),
+    count7: countSince(7),
+  };
 }
 
 export default async function NewDashboardPage() {
@@ -82,38 +98,44 @@ export default async function NewDashboardPage() {
     }))
     .filter((d) => d.value > 0);
 
+  // Temporal split: month KPI vs rail stats vs rail chart (one home each)
+  const temporal = computeTemporalStats(allLogs, totalDocs);
+
   // KPI band — one bordered strip, 4 cells (no pastel icon tiles,
   // no in-strip CTA: the top bar owns the primary action).
   const kpis = [
     { label: "Total PKWT", value: pkwtCount, icon: FileSignature },
     { label: "Total SK", value: skCount, icon: FilePlus },
-    { label: "Total Dokumen", value: totalDocs, icon: FileText },
+    { label: "Bulan ini", value: temporal.monthCount, icon: CalendarDays },
     { label: "Pengguna Aktif", value: uniqueUsers, icon: Users },
   ];
-
-  // Temporal quick stats (see computeQuickStats for fact-domain rationale)
-  const quickStats = computeQuickStats(allLogs, totalDocs);
 
   const recentActivity = allLogs.slice(0, 5);
 
   return (
     <div className="space-y-6">
       {/* KPI band: ONE bordered strip with internal hairlines (not 4 cards) */}
-      <div className="grid grid-cols-2 rounded-lg border border-border bg-surface-1 md:grid-cols-4">
-        {kpis.map((kpi) => (
-          <div
-            key={kpi.label}
-            className="border-border p-5 even:border-l nth-[3]:border-t nth-[4]:border-t nth-[3]:border-l nth-[4]:border-l md:nth-[3]:border-t-0 md:nth-[4]:border-t-0 md:nth-[2]:border-l-0 md:nth-[2]:border-t-0"
-          >
-            <div className="flex items-center gap-2 text-text-2">
-              <kpi.icon className="size-4" aria-hidden="true" />
-              <span className="text-sm font-medium">{kpi.label}</span>
+      <div className="overflow-hidden rounded-lg border border-border bg-surface-1">
+        <div className="grid grid-cols-2 md:grid-cols-4">
+          {kpis.map((kpi) => (
+            <div
+              key={kpi.label}
+              className="border-border p-5 even:border-l nth-[3]:border-t nth-[4]:border-t nth-[3]:border-l nth-[4]:border-l md:nth-[3]:border-t-0 md:nth-[4]:border-t-0 md:nth-[2]:border-l-0 md:nth-[2]:border-t-0"
+            >
+              <div className="flex items-center gap-2 text-text-2">
+                <kpi.icon className="size-4" aria-hidden="true" />
+                <span className="text-sm font-medium">{kpi.label}</span>
+              </div>
+              <p className="mt-2 text-2xl font-semibold tabular text-text-1">
+                {kpi.value.toLocaleString("id-ID")}
+              </p>
             </div>
-            <p className="mt-2 text-2xl font-semibold tabular text-text-1">
-              {kpi.value.toLocaleString("id-ID")}
-            </p>
-          </div>
-        ))}
+          ))}
+        </div>
+        {/* Window label: windowed counts must never read as exact totals */}
+        <p className="border-t border-border px-5 py-2.5 text-right text-xs tabular text-text-2">
+          Berdasarkan {RECENT_CAP.toLocaleString("id-ID")} dokumen terbaru
+        </p>
       </div>
 
       {/* Main table + right rail. Rail is side-by-side ONLY at xl (>=1280):
@@ -278,33 +300,42 @@ export default async function NewDashboardPage() {
               </ul>
             </section>
 
-            {/* 2. Quick stats — temporal share of the visible total */}
+            {/* 2. Quick stats — temporal share + daily mean. No 7-day row:
+                the bar chart below OWNS the 7-day breakdown (dedup). */}
             <section aria-labelledby="quick-stats-heading" className="border-b border-border p-5">
               <h2 id="quick-stats-heading" className="mb-3 text-[15px] font-semibold text-text-1">
                 Quick Stats
               </h2>
-              <p className="mb-3 text-xs text-text-2">
-                {totalDocs.toLocaleString("id-ID")} dokumen (30 hari terakhir)
+              <p className="mb-3 text-xs tabular text-text-2">
+                Dari {totalDocs.toLocaleString("id-ID")} dokumen terbaru
               </p>
               <ul className="space-y-3.5">
-                {quickStats.map((s) => (
-                  <li key={s.label}>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-text-2">{s.label}</span>
-                      <span className="font-semibold tabular text-text-1">{s.count}</span>
-                    </div>
-                    {/* Bar is aria-hidden: the number is the truth (color-not-only) */}
+                <li>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-text-2">Hari ini</span>
+                    <span className="font-semibold tabular text-text-1">
+                      {temporal.hariIni.toLocaleString("id-ID")}
+                    </span>
+                  </div>
+                  {/* Bar is aria-hidden: the number is the truth (color-not-only) */}
+                  <div
+                    className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-surface-3"
+                    aria-hidden="true"
+                  >
                     <div
-                      className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-surface-3"
-                      aria-hidden="true"
-                    >
-                      <div
-                        className="h-full rounded-full bg-primary transition-all"
-                        style={{ width: `${s.pct}%` }}
-                      />
-                    </div>
-                  </li>
-                ))}
+                      className="h-full rounded-full bg-primary transition-all"
+                      style={{ width: `${temporal.hariIniPct}%` }}
+                    />
+                  </div>
+                </li>
+                <li>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-text-2">Rata-rata per hari (30 hari)</span>
+                    <span className="font-semibold tabular text-text-1">
+                      {temporal.avg30}
+                    </span>
+                  </div>
+                </li>
               </ul>
             </section>
 
@@ -364,8 +395,24 @@ export default async function NewDashboardPage() {
               )}
             </section>
 
-            {/* 4. Chart slot reserved for Phase 2 — renders nothing now
-                (an empty placeholder box teaches nothing). */}
+            {/* 4. Activity bars — temporal detail for ALL types. Its own
+                fact domain: daily counts (the chart owns the 7-day
+                breakdown). Fill = primary, never another type's hue. */}
+            <section aria-labelledby="rail-chart-heading" className="border-t border-border p-5">
+              <div className="mb-3 flex items-center justify-between">
+                <h2 id="rail-chart-heading" className="text-[15px] font-semibold text-text-1">
+                  Aktivitas 7 hari
+                </h2>
+                <p className="text-xs tabular text-text-2">
+                  Total {temporal.count7.toLocaleString("id-ID")}
+                </p>
+              </div>
+              <DashboardCharts
+                logs={allLogs}
+                chartType="bar"
+                fill="var(--brand-600)"
+              />
+            </section>
           </div>
         </aside>
       </div>

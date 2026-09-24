@@ -77,7 +77,7 @@ function DonutChart({ logs }) {
   );
 }
 
-function ActivityBarChart({ logs }) {
+function ActivityBarChart({ logs, fill = "var(--brand-600)" }) {
   const grouped = {};
   [...logs].reverse().forEach(log => {
     const date = new Date(log.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: 'short' });
@@ -115,16 +115,16 @@ function ActivityBarChart({ logs }) {
             contentStyle={{ borderRadius: '8px', border: '1px solid var(--border)', boxShadow: 'var(--shadow-popover-value)', fontSize: '13px' }}
             cursor={{ fill: 'var(--surface-2)' }}
           />
-          <Bar dataKey="Total" fill="var(--chart-1)" radius={[4, 4, 0, 0]} />
+          <Bar dataKey="Total" fill={fill} radius={[4, 4, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </div>
   );
 }
 
-export function DashboardCharts({ logs, chartType = 'bar' }) {
+export function DashboardCharts({ logs, chartType = 'bar', fill }) {
   if (chartType === 'pie') {
     return <DonutChart logs={logs} />;
   }
-  return <ActivityBarChart logs={logs} />;
+  return <ActivityBarChart logs={logs} fill={fill} />;
 }
