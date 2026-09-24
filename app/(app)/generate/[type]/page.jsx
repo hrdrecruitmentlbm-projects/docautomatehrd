@@ -1,10 +1,13 @@
 import { getDocumentConfig } from "@/lib/document-configs";
 import { DynamicForm } from "@/components/DynamicForm";
 import { PkwtAutoForm } from "@/components/PkwtAutoForm";
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import { redirect } from "next/navigation";
 
+// headerMode is "shell" for /generate/* (route-meta): the TopBar owns this
+// route's single <h1> and its back link (-> /input-dokumen). The page must
+// render NO <h1> and no second back affordance (one-h1 / one-back invariant).
+// The per-type helper copy stays in-page as a section intro under the shell
+// title, because subtitles hidden on mobile must not carry the only copy.
 export default async function GenerateDocumentPage({ params }) {
   const resolvedParams = await params;
   const config = getDocumentConfig(resolvedParams.type);
@@ -15,18 +18,11 @@ export default async function GenerateDocumentPage({ params }) {
 
   return (
     <div className="max-w-4xl mx-auto">
-      <div className="mb-8">
-        <Link href="/dashboard" className="inline-flex items-center text-sm text-slate-500 hover:text-blue-600 transition-colors mb-4">
-          <ArrowLeft className="w-4 h-4 mr-1" />
-          Kembali ke Dashboard
-        </Link>
-        <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Buat {config.label}</h1>
-        <p className="text-slate-500 mt-1">
-          {resolvedParams.type === "pkwt"
-            ? "Ketik nama karyawan — data personal, payroll, dan perusahaan terisi otomatis."
-            : config.description}
-        </p>
-      </div>
+      <p className="mb-6 text-sm text-slate-500">
+        {resolvedParams.type === "pkwt"
+          ? "Ketik nama karyawan — data personal, payroll, dan perusahaan terisi otomatis."
+          : config.description}
+      </p>
 
       {resolvedParams.type === "pkwt" ? <PkwtAutoForm /> : <DynamicForm config={config} />}
     </div>
