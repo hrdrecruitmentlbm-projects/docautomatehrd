@@ -43,47 +43,75 @@ export async function POST(req) {
     const drive = google.drive({ version: "v3", auth: getGoogleClient(session.accessToken) });
 
     // ---- Root folder(s) & daftar ID template (untuk dilewati) ----
+    // Nilai config bisa berupa ID mentah ATAU URL Drive yang ditempel user ->
+    // selalu dinormalisasi; nilai yang tidak terbaca dilaporkan, bukan membuat
+    // query Drive meledak jadi 500.
     const templateIds = new Set();
     const roots = new Set();
-
-    const explicit = body?.rootFolderId ? extractFolderId(body.rootFolderId) : "";
-    if (explicit) {
-      if (!isValidGoogleId(explicit)) {
-        return Response.json({ error: "rootFolderId tidak valid" }, { status: 400 });
+    const invalidRoots = [];
+    const addRoot = (raw, source) => {
+      const v = String(raw || "").trim();
+      if (!v) return false;
+      const id = extractFolderId(v);
+      if (id && isValidGoogleId(id)) {
+        roots.add(id);
+        return true;
       }
-      roots.add(explicit);
+      invalidRoots.push({ source, value: v.slice(0, 160) });
+      return false;
+    };
+
+    if (body?.rootFolderId) {
+      if (!addRoot(body.rootFolderId, "request.rootFolderId")) {
+        return Response.json({ error: "rootFolderId tidak valid", invalidRoots }, { status: 400 });
+      }
     } else {
       const { data: settings } = await supabaseAdmin
         .from("settings")
-        .select("pkwt_folder_id, pkwt_template_id, sk_template_id, memo_template_id, sp_template_id")
+        .select("*")
         .eq("user_email", session.user.email)
         .limit(1);
       const s = settings?.[0];
-      if (s?.pkwt_folder_id) roots.add(s.pkwt_folder_id);
+      addRoot(s?.pkwt_folder_id, "settings.pkwt_folder_id");
       for (const v of [s?.pkwt_template_id, s?.sk_template_id, s?.memo_template_id, s?.sp_template_id]) {
         if (v) templateIds.add(v);
       }
 
       const { data: maps } = await supabaseAdmin
         .from("company_map")
-        .select("pkwt_folder_id, pkwt_template_id")
+        .select("*")
         .limit(1000);
       for (const m of maps || []) {
-        if (m.pkwt_folder_id) roots.add(m.pkwt_folder_id);
+        addRoot(m.pkwt_folder_id, `company_map.${m.lini_bisnis}`);
         if (m.pkwt_template_id) templateIds.add(m.pkwt_template_id);
       }
     }
 
     if (roots.size === 0) {
       return Response.json({
-        error: "Folder root PKWT belum dikonfigurasi. Isi Folder ID PKWT di Settings/Data, atau kirim rootFolderId di body.",
+        error: invalidRoots.length
+          ? "Tidak ada root folder yang valid — semua nilai config bukan ID/URL Drive yang terbaca."
+          : "Folder root PKWT belum dikonfigurasi. Isi Folder ID PKWT di Settings/Data, atau kirim rootFolderId di body.",
+        invalidRoots,
       }, { status: 400 });
     }
 
     const items = [];
+    const rootErrors = [];
+    const rootReport = [];
     for (const rootId of roots) {
+      // Nama folder hanya untuk laporan (best-effort).
+      const name = await safeFolderName(drive, rootId);
       // ---- Klasifikasi (read-only) ----
-      const classified = await classifyRoot(drive, rootId, templateIds);
+      let classified;
+      try {
+        classified = await classifyRoot(drive, rootId, templateIds);
+      } catch (e) {
+        // Satu root bermasalah tidak boleh membatalkan seluruh laporan.
+        rootErrors.push({ id: rootId, name, error: describeDriveError(e) });
+        continue;
+      }
+      rootReport.push({ id: rootId, name, files: classified.length });
       items.push(...classified);
 
       if (mode !== "execute") continue;
@@ -118,9 +146,11 @@ export async function POST(req) {
     for (const i of items) summary[i.action] = (summary[i.action] || 0) + 1;
 
     return Response.json({
-      success: summary.failed === 0,
+      success: summary.failed === 0 && rootErrors.length === 0 && invalidRoots.length === 0,
       mode,
-      roots: [...roots],
+      roots: rootReport,
+      rootErrors,
+      invalidRoots,
       summary,
       total: items.length,
       items,
@@ -132,6 +162,15 @@ export async function POST(req) {
 }
 
 // Listing + klasifikasi per file. Murni baca: tidak membuat folder apa pun.
+async function safeFolderName(drive, folderId) {
+  try {
+    const res = await drive.files.get({ fileId: folderId, fields: "name" });
+    return res.data.name || null;
+  } catch {
+    return null; // ID tidak terbaca -> laporan tetap jalan tanpa nama
+  }
+}
+
 async function classifyRoot(drive, rootId, templateIds) {
   const items = [];
   let pageToken;
