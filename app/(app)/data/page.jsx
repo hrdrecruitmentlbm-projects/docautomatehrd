@@ -18,12 +18,14 @@ export default async function DataPage() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
-      <div className="mb-2">
-        <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Data Karyawan & Payroll</h1>
-        <p className="text-slate-500 mt-1">
-          Tempel link Google Sheet + folder Drive, lalu Sync agar PKWT terisi otomatis. Cukup ketik nama saat buat dokumen.
-        </p>
-      </div>
+      {/* headerMode: "shell" — TopBar owns the single <h1>.
+          The how-to copy lives in the shell subtitle, which hides below sm,
+          so it is mirrored here for <sm only (content-priority): mobile
+          first-run users must still see the instructions, desktop once. */}
+      <p className="text-sm text-text-2 sm:hidden">
+        Tempel link Google Sheet + folder Drive, lalu Sync agar PKWT terisi
+        otomatis. Cukup ketik nama saat buat dokumen.
+      </p>
 
       <SheetsSync
         initialMasterUrl={saved.master_sheet_url || ""}
