@@ -3,7 +3,8 @@ import { supabase, supabaseAdmin } from "@/lib/supabase";
 import { getDocumentConfig } from "@/lib/document-configs";
 import { copyTemplate, replacePlaceholders, buildDocUrl, insertKopImage } from "@/lib/google";
 import { generateDocumentNumber } from "@/lib/auto-numbering";
-import { resolveCompany, buildPkwtReplacements, addMonths, formatTanggalId } from "@/lib/pkwt";
+import { getOrCreateFolder } from "@/lib/drive-folders";
+import { resolveCompany, buildPkwtReplacements, addMonths, formatTanggalId, formatMonthYearId } from "@/lib/pkwt";
 
 export async function POST(req) {
   try {
@@ -201,7 +202,31 @@ async function handlePkwtAuto({ session, settings, employeeKey, manual = {} }) {
 
   const displayName = employee.nama_asli || "Document";
   const fileName = `${documentNumber.replace(/\//g, "_")} - ${displayName}`;
-  const docId = await copyTemplate(session.accessToken, templateId, fileName, folderId);
+
+  // ---- Arsip PKWT: HRIS PKWT/<Bulan Tahun>/<KODE PERUSAHAAN> ----
+  // Bulan = tanggal pembuatan (sama dengan dasar nomor surat).
+  // Kode = company_code dari /data (company_map); baris tanpa KOP memakai
+  // lini_bisnis mentah -> selalu sama dengan segmen HRD-XXX di nomor surat.
+  // Gagal menyiapkan arsip TIDAK boleh membatalkan dokumen: fallback ke
+  // folder root dengan catatan di respons.
+  let targetFolderId = folderId;
+  let folderPath = null;
+  let folderNote = "";
+  try {
+    const monthFolder = formatMonthYearId(new Date());
+    const divisionFolder = String(numberingCode || "UMUM").toUpperCase();
+    const memo = new Map();
+    const monthFolderId = await getOrCreateFolder(session.accessToken, folderId, monthFolder, memo);
+    targetFolderId = await getOrCreateFolder(session.accessToken, monthFolderId, divisionFolder, memo);
+    folderPath = `${monthFolder}/${divisionFolder}`;
+  } catch (e) {
+    console.error("Archive folder resolution failed, falling back to root folder:", e);
+    targetFolderId = folderId;
+    folderPath = null;
+    folderNote = `Folder arsip gagal dibuat (${e.message}) — dokumen disimpan di folder root.`;
+  }
+
+  const docId = await copyTemplate(session.accessToken, templateId, fileName, targetFolderId);
   await replacePlaceholders(session.accessToken, docId, replacements);
 
   // KOP otomatis: sisipkan gambar perusahaan di tanda {{kop}}, lalu hapus tanda.
@@ -247,6 +272,8 @@ async function handlePkwtAuto({ session, settings, employeeKey, manual = {} }) {
     employee_nama_key: key,
     lini_bisnis: liniBisnis,
     periode_bulan: payroll?.periode_bulan || null,
+    folder_id: targetFolderId,
+    folder_path: folderPath,
   });
   if (withAudit.error && /column/i.test(withAudit.error.message || "")) {
     const retry = await supabaseAdmin.from("document_logs").insert(baseRow);
@@ -262,6 +289,9 @@ async function handlePkwtAuto({ session, settings, employeeKey, manual = {} }) {
     docId,
     documentNumber,
     companyCode: numberingCode,
+    folderPath,
+    folderId: targetFolderId,
+    folderNote,
     hasKop,
     needsManualKop: !hasKop,
     kopInserted: kop.inserted,
