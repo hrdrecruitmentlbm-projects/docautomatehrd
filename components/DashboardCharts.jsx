@@ -8,13 +8,40 @@ import {
 // Categorical palette bound to TYPE, never to array index, so donut slices
 // always match badges/legend regardless of data insertion order:
 // PKWT brand emerald, SK gold, Memo graphite, SP signal red.
-const TYPE_COLORS = {
+export const TYPE_COLORS = {
   PKWT: "var(--chart-1)",
   SK: "var(--chart-2)",
   MEMO: "var(--chart-3)",
   SP: "var(--chart-4)",
 };
 const FALL_COLOR = "var(--chart-5)";
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Floor a timestamp to the start of its bucket (local time). */
+function bucketStart(time, granularity) {
+  const d = new Date(time);
+  d.setHours(0, 0, 0, 0);
+  if (granularity === "week") {
+    // Monday-start week (id-ID convention).
+    const dow = (d.getDay() + 6) % 7;
+    d.setDate(d.getDate() - dow);
+  } else if (granularity === "month") {
+    d.setDate(1);
+  }
+  return d.getTime();
+}
+
+function bucketLabel(time, granularity) {
+  const d = new Date(time);
+  if (granularity === "month") {
+    return d.toLocaleDateString("id-ID", { month: "short", year: "2-digit" });
+  }
+  if (granularity === "week") {
+    return d.toLocaleDateString("id-ID", { day: "2-digit", month: "short" });
+  }
+  return d.toLocaleDateString("id-ID", { day: "2-digit", month: "short" });
+}
 
 function DonutChart({ logs }) {
   const typeCounts = logs.reduce((acc, log) => {
@@ -32,7 +59,7 @@ function DonutChart({ logs }) {
 
   if (total === 0) {
     return (
-      <div className="flex items-center justify-center h-[180px] text-text-2 text-sm">
+      <div className="flex items-center justify-center h-[200px] text-text-2 text-sm">
         Belum ada data
       </div>
     );
@@ -42,7 +69,7 @@ function DonutChart({ logs }) {
   const summary = data.map(d => `${d.name} ${d.value}`).join(', ');
 
   return (
-    <div className="relative flex items-center justify-center h-[180px]">
+    <div className="relative flex items-center justify-center h-[200px]">
       <p className="sr-only">
         Total {total} dokumen: {summary}
       </p>
@@ -52,8 +79,8 @@ function DonutChart({ logs }) {
             data={data}
             cx="50%"
             cy="50%"
-            innerRadius={55}
-            outerRadius={80}
+            innerRadius={62}
+            outerRadius={88}
             paddingAngle={3}
             dataKey="value"
             strokeWidth={0}
@@ -70,61 +97,110 @@ function DonutChart({ logs }) {
       </ResponsiveContainer>
       {/* Center label */}
       <div className="absolute flex flex-col items-center pointer-events-none">
-        <span className="text-2xl font-semibold tabular text-text-1">{total}</span>
-        <span className="text-xs font-medium text-text-2">Total</span>
+        <span className="text-3xl font-semibold tabular text-text-1">{total}</span>
+        <span className="text-xs font-medium text-text-2">Dokumen</span>
       </div>
     </div>
   );
 }
 
-function ActivityBarChart({ logs, fill = "var(--brand-600)" }) {
-  const grouped = {};
-  [...logs].reverse().forEach(log => {
-    const date = new Date(log.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: 'short' });
-    grouped[date] = (grouped[date] || 0) + 1;
-  });
+/**
+ * Bar chart bucketed by granularity (day/week/month).
+ * - bounds {from,to} (ms) drives empty-bucket filling so a quiet day still
+ *   renders a zero bar instead of shifting the axis.
+ * - Counting starts empty and buckets every log inside bounds; logs outside
+ *   bounds are ignored (the parent already filtered, this is belt+braces).
+ */
+export function ActivityBarChart({
+  logs,
+  fill = "var(--brand-600)",
+  granularity = "day",
+  bounds = null,
+}) {
+  const counts = new Map();
+  for (const log of logs) {
+    const t = new Date(log.created_at).getTime();
+    if (Number.isNaN(t)) continue;
+    if (bounds && (t < bounds.from || t > bounds.to)) continue;
+    const key = bucketStart(t, granularity);
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
 
-  const data = Object.entries(grouped).slice(-7).map(([date, Total]) => ({ date, Total }));
+  // Bucket span for walking empty buckets.
+  const spanMs = granularity === "week" ? 7 * DAY_MS : DAY_MS;
+  const step = (t) => {
+    if (granularity === "month") {
+      const d = new Date(t);
+      d.setMonth(d.getMonth() + 1);
+      return d.getTime();
+    }
+    return t + spanMs;
+  };
+
+  let keys = [...counts.keys()].sort((a, b) => a - b);
+  if (bounds && keys.length > 0) {
+    const walk = [];
+    for (
+      let k = bucketStart(bounds.from, granularity);
+      k <= bounds.to;
+      k = step(k)
+    ) {
+      walk.push(k);
+      if (walk.length > 120) break; // safety: never render >120 bars
+    }
+    keys = walk;
+  }
+
+  const data = keys.map(k => ({
+    date: bucketLabel(k, granularity),
+    Total: counts.get(k) || 0,
+  }));
 
   if (data.length === 0) {
     return (
-      <div className="flex items-center justify-center h-[160px] text-text-2 text-sm">
+      <div className="flex items-center justify-center h-[220px] text-text-2 text-sm">
         Belum ada data
       </div>
     );
   }
 
   return (
-    <div className="h-[160px] w-full">
+    <div className="h-[220px] w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data} margin={{ top: 5, right: 5, left: -30, bottom: 0 }}>
+        <BarChart data={data} margin={{ top: 5, right: 5, left: -22, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--row-border)" />
           <XAxis
             dataKey="date"
-            tick={{ fontSize: 12, fill: 'var(--text-2)', fontWeight: 500 }}
+            tick={{ fontSize: 11, fill: 'var(--text-2)', fontWeight: 500 }}
             axisLine={false}
             tickLine={false}
+            interval="preserveStartEnd"
+            minTickGap={12}
           />
           <YAxis
-            tick={{ fontSize: 12, fill: 'var(--text-2)', fontWeight: 500 }}
+            tick={{ fontSize: 11, fill: 'var(--text-2)', fontWeight: 500 }}
             axisLine={false}
             tickLine={false}
             allowDecimals={false}
+            width={44}
           />
           <Tooltip
             contentStyle={{ borderRadius: '8px', border: '1px solid var(--border)', boxShadow: 'var(--shadow-popover-value)', fontSize: '13px' }}
             cursor={{ fill: 'var(--surface-2)' }}
+            formatter={(value) => [value, "Dokumen"]}
           />
-          <Bar dataKey="Total" fill={fill} radius={[4, 4, 0, 0]} />
+          <Bar dataKey="Total" fill={fill} radius={[4, 4, 0, 0]} maxBarSize={40} />
         </BarChart>
       </ResponsiveContainer>
     </div>
   );
 }
 
-export function DashboardCharts({ logs, chartType = 'bar', fill }) {
+export function DashboardCharts({ logs, chartType = 'bar', fill, granularity, bounds }) {
   if (chartType === 'pie') {
     return <DonutChart logs={logs} />;
   }
-  return <ActivityBarChart logs={logs} fill={fill} />;
+  return (
+    <ActivityBarChart logs={logs} fill={fill} granularity={granularity} bounds={bounds} />
+  );
 }
