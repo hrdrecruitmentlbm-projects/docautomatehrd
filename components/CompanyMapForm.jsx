@@ -60,7 +60,7 @@ export function CompanyMapForm() {
       </h2>
       <p className="mt-1 max-w-3xl text-sm text-text-2">
         Satu baris per LINI BISNIS dari master. Kosongkan Kode + Template untuk
-        SAHAM/TALOG/TAST (tanpa KOP — dokumen tetap dibuat generik dan KOP
+        SAHAM/TALOG/TAST (tanpa KOP, dokumen tetap dibuat generik dan KOP
         ditambah manual karena hasilnya bisa diedit). Baris{" "}
         <code className="rounded bg-surface-3 px-1 font-mono text-xs">__FALLBACK__</code>{" "}
         = template generik tanpa KOP.
@@ -78,7 +78,7 @@ export function CompanyMapForm() {
           /* error != empty, with recovery */
           <div className="rounded-md border border-border bg-surface-2 p-4 text-sm" role="alert">
             <p className="font-semibold text-text-1">Gagal memuat pemetaan</p>
-            <p className="mt-1 text-text-2">{loadError} — muat ulang halaman untuk mencoba lagi.</p>
+            <p className="mt-1 text-text-2">{loadError}, muat ulang halaman untuk mencoba lagi.</p>
           </div>
         ) : rows.length === 0 ? (
           /* Teaching empty: explains WHY it is empty and the fix */
@@ -86,7 +86,7 @@ export function CompanyMapForm() {
             <MapPinned className="mb-3 size-6 text-text-2" aria-hidden="true" />
             <p className="mb-1 text-sm font-semibold text-text-1">Belum ada pemetaan</p>
             <p className="max-w-md text-sm text-text-2">
-              Sync master dulu — daftar lini bisnis akan muncul di sini untuk
+              Sync master dulu, daftar lini bisnis akan muncul di sini untuk
               Anda petakan ke KOP dan template.
             </p>
           </div>

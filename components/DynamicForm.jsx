@@ -202,7 +202,7 @@ export function DynamicForm({ config }) {
                         .getElementById(k === "companyCode" ? "trigger-companyCode" : k)
                         ?.focus();
                     }}
-                    className="text-primary hover:underline"
+                    className="text-text-1 underline underline-offset-2 hover:text-primary"
                   >
                     {errors[k].message}
                   </a>

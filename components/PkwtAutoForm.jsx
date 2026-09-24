@@ -333,7 +333,7 @@ export function PkwtAutoForm() {
                         e.preventDefault();
                         document.getElementById(target)?.focus();
                       }}
-                      className="text-primary hover:underline"
+                      className="text-text-1 underline underline-offset-2 hover:text-primary"
                     >
                       {message}
                     </a>
@@ -502,7 +502,7 @@ export function PkwtAutoForm() {
           {detailError && !loadingDetail && (
             <div role="alert" className="rounded-md border border-border bg-surface-2 p-3 text-sm">
               <p className="font-semibold text-text-1">Gagal memuat data karyawan</p>
-              <p className="mt-0.5 text-text-2">{detailError} — pilih karyawan lagi untuk mengulang.</p>
+              <p className="mt-0.5 text-text-2">{detailError}, pilih karyawan lagi untuk mengulang.</p>
             </div>
           )}
 

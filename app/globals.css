@@ -74,7 +74,7 @@
   --surface-2: oklch(0.945 0.013 162);   /* hover fill */
   --surface-3: oklch(0.915 0.018 162);   /* pressed, progress track */
   --text-1: oklch(0.22 0.012 162);       /* ink, ~15:1 on white */
-  --text-2: oklch(0.475 0.02 162);       /* secondary, >=4.5:1 */
+  --text-2: oklch(0.45 0.02 162);        /* secondary: >=4.6:1 even on surface-2 hover */
   --row-border: oklch(0.94 0.01 162);    /* table row divider */
 
   /* Brand ramp (renamed from --blue-*): emerald authority */
@@ -108,7 +108,7 @@
   --secondary: oklch(0.945 0.013 162);
   --secondary-foreground: oklch(0.22 0.012 162);
   --muted: oklch(0.945 0.013 162);
-  --muted-foreground: oklch(0.475 0.02 162); /* >=4.5:1 on muted (AA pass) */
+  --muted-foreground: oklch(0.45 0.02 162); /* matches --text-2: AA on muted + hover */
   --accent: oklch(0.945 0.013 162);
   --accent-foreground: oklch(0.22 0.012 162);
   --destructive: oklch(0.577 0.245 27.325);

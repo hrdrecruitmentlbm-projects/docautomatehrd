@@ -28,7 +28,7 @@ export function CopyLinkButton({ url }) {
     <button
       type="button"
       onClick={onCopy}
-      className="inline-flex size-9 items-center justify-center rounded-md text-text-2 transition-colors hover:bg-surface-2 hover:text-text-1 md:size-8"
+      className="relative inline-flex size-9 items-center justify-center rounded-md text-text-2 transition-colors hover:bg-surface-2 hover:text-text-1 after:absolute after:-inset-1 after:content-['']"
       aria-label="Salin link dokumen"
     >
       {copied ? (

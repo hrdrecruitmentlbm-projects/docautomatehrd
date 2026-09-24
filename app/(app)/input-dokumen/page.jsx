@@ -5,7 +5,7 @@ import { CopyLinkButton } from "@/components/documents/CopyLinkButton";
 
 /**
  * Documents hub: folder strip + Files table.
- * - Scope: GLOBAL (team library) — badge says so, unlike History (personal).
+ * - Scope: GLOBAL (team library), badge says so, unlike History (personal).
  * - Filters are SERVER truth deep-linked via ?type= (shareable, back/forward
  *   safe); folder cells and pills drive the SAME param so there is one state.
  * - Sort via ?sort= (aria-sort on th), pagination via cumulative ?load=
@@ -183,7 +183,7 @@ export default async function DocumentsHubPage({ searchParams }) {
             </div>
             <h3 className="mb-1 text-sm font-semibold text-text-1">Belum ada dokumen</h3>
             <p className="mb-5 max-w-sm text-sm text-text-2">
-              Buat dokumen pertama Anda — data karyawan terisi otomatis dari master.
+              Buat dokumen pertama Anda, data karyawan terisi otomatis dari master.
             </p>
             <Link
               href="/generate/pkwt"
@@ -223,7 +223,7 @@ export default async function DocumentsHubPage({ searchParams }) {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <caption className="sr-only">
-                  Dokumen {activeLabel || "semua jenis"} — urutkan menurut {sort.replace("-", " ")}.
+                  Dokumen {activeLabel || "semua jenis"}, urutkan menurut {sort.replace("-", " ")}.
                   Menampilkan {rows.length} dari {shownTotal}.
                 </caption>
                 <thead>
@@ -303,7 +303,7 @@ export default async function DocumentsHubPage({ searchParams }) {
                               href={log.google_doc_url}
                               target="_blank"
                               rel="noreferrer"
-                              className="inline-flex size-9 items-center justify-center rounded-md text-text-2 transition-colors hover:bg-surface-2 hover:text-text-1 md:size-8"
+                              className="relative inline-flex size-9 items-center justify-center rounded-md text-text-2 transition-colors hover:bg-surface-2 hover:text-text-1 after:absolute after:-inset-1 after:content-['']"
                               aria-label={`Buka ${log.employee_name || "dokumen"} di Google Docs`}
                             >
                               <ExternalLink className="size-4" aria-hidden="true" />

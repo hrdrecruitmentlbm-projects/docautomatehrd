@@ -18,9 +18,9 @@ export default async function GenerateDocumentPage({ params }) {
 
   return (
     <div className="max-w-4xl mx-auto">
-      <p className="mb-6 text-sm text-slate-500">
+      <p className="mb-6 text-sm text-text-2">
         {resolvedParams.type === "pkwt"
-          ? "Ketik nama karyawan — data personal, payroll, dan perusahaan terisi otomatis."
+          ? "Ketik nama karyawan, data personal, payroll, dan perusahaan terisi otomatis."
           : config.description}
       </p>
 

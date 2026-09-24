@@ -9,12 +9,12 @@ import { toast } from "sonner";
 import { CheckCircle2, Loader2, RefreshCw, Stethoscope, TableProperties, XCircle, RotateCcw } from "lucide-react";
 
 /**
- * Data page sections 1 (Master) and 2 (Payroll) — hairline sections inside
+ * Data page sections 1 (Master) and 2 (Payroll), hairline sections inside
  * the page's single panel (no Card wrappers; one panel, many sections).
  *
  * Feedback policy: toasts carry only the short async outcome; the inline
  * result boxes carry the persistent detail (counts, failures, dupes).
- * Diagnosa lives in a collapsed <details> (progressive disclosure) — it is
+ * Diagnosa lives in a collapsed <details> (progressive disclosure), it is
  * not a competing primary action.
  */
 export function SheetsSync({
@@ -232,7 +232,7 @@ export function SheetsSync({
       if (!res.ok) throw new Error(data.error || "Gagal sinkron payroll");
       setPayrollResult(data);
       toast.success(`${data.matched}/${data.total} payroll cocok (${data.periode_bulan})`);
-      if (data.unmatched?.length > 0) toast.warning(`${data.unmatched.length} nama tidak cocok — cek ejaan`);
+      if (data.unmatched?.length > 0) toast.warning(`${data.unmatched.length} nama tidak cocok, cek ejaan`);
       if (data.persistHint) toast.warning(data.persistHint);
     } catch (e) {
       toast.error(e.message);
@@ -330,7 +330,7 @@ export function SheetsSync({
               className="space-y-1.5"
             >
               <div className="flex justify-between text-xs tabular text-text-2">
-                <span>Sync berjalan — aman ditinggal, lanjut otomatis</span>
+                <span>Sync berjalan, aman ditinggal, lanjut otomatis</span>
                 <span>{masterProgress.done}/{masterProgress.total}</span>
               </div>
               <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-3">
@@ -412,7 +412,7 @@ export function SheetsSync({
             />
             <p className="text-xs text-text-2">
               {payrollLocked
-                ? "Sinkron master dulu — payroll dicocokkan ke nama di master."
+                ? "Sinkron master dulu, payroll dicocokkan ke nama di master."
                 : "Folder: file terbaru dipilih otomatis (nama YYYY-MM menang). File langsung: tentukan periode di bawah."}
             </p>
           </div>

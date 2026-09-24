@@ -22,7 +22,7 @@ export default async function DataPage() {
 
   return (
     <div className="max-w-5xl space-y-4">
-      {/* headerMode: "shell" — TopBar owns the single <h1>.
+      {/* headerMode: "shell", TopBar owns the single <h1>.
           The how-to copy lives in the shell subtitle, which hides below sm,
           so it is mirrored here for <sm only (content-priority). */}
       <p className="text-sm text-text-2 sm:hidden">
@@ -44,7 +44,7 @@ export default async function DataPage() {
               <ol className="mt-1 list-inside list-decimal text-sm text-brand-wash-ink/90">
                 <li>Tempel link Sheet master</li>
                 <li>Sync master</li>
-                <li>Buat PKWT pertama — data terisi otomatis</li>
+                <li>Buat PKWT pertama, data terisi otomatis</li>
               </ol>
             </div>
           </div>

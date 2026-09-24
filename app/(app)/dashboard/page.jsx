@@ -249,7 +249,7 @@ export default async function NewDashboardPage() {
                             href={log.google_doc_url}
                             target="_blank"
                             rel="noreferrer"
-                            className="inline-flex size-9 items-center justify-center rounded-md text-text-2 transition-colors hover:bg-surface-2 hover:text-text-1 md:size-8"
+                            className="relative inline-flex size-9 items-center justify-center rounded-md text-text-2 transition-colors hover:bg-surface-2 hover:text-text-1 after:absolute after:-inset-1 after:content-['']"
                             aria-label={`Buka ${log.employee_name || "dokumen"} di Google Docs`}
                           >
                             <ExternalLink className="size-4" aria-hidden="true" />

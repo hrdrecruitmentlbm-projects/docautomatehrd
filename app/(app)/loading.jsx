@@ -10,7 +10,7 @@ export default function Loading() {
     <div
       role="status"
       aria-live="polite"
-      className="space-y-4 animate-pulse motion-reduce:animate-none"
+      className="space-y-4 motion-reduce:animate-none"
     >
       <span className="sr-only">Memuat halaman...</span>
 
