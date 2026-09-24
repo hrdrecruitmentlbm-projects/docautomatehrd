@@ -17,6 +17,10 @@
   --shadow-popover: var(--shadow-popover-value);
   --shadow-dialog: var(--shadow-dialog-value);
 
+  /* Brand wash (active nav / selected folder) as theme colors */
+  --color-brand-wash: var(--brand-wash);
+  --color-brand-wash-ink: var(--brand-wash-ink);
+
   --breakpoint-3xl: 1680px;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
