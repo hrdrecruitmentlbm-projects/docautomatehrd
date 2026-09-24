@@ -7,30 +7,38 @@ import { extractFolderId, isValidGoogleId } from "@/lib/sheets";
 import { formatMonthYearId } from "@/lib/pkwt";
 
 // POST /api/migrate-archive — satu kali: pindahkan PKWT lama yang numpuk rata
-// di root folder (HRIS PKWT) ke struktur arsip:
+// di root folder ke struktur arsip:
 //
-//   HRIS PKWT/<Bulan Tahun>/<KODE PERUSAHAAN>/
+//   <root>/<Bulan Tahun>/<KODE PERUSAHAAN>/
 //
 // Body:
-//   { mode?: "dry-run" | "execute",   // default "dry-run" (hanya laporan)
-//     rootFolderId?: string }         // URL/id root; default = gabungan config
+//   { mode?: "dry-run" | "execute",      // default "dry-run" (hanya laporan)
+//     rootFolderId?: string,             // batasi ke SATU root (URL/id); default = semua config
+//     targetRootFolderId?: string }      // semua file pindah ke bawah root INI
+//                                         // (default: masing-masing root asal)
 //
 // Aturan klasifikasi:
 //   - Bulan  <- createdTime file (keputusan: tanggal pembuatan).
-//   - Kode   <- pola nama hasil generate: `00016_ SPK_HRD-MJO_INT.23_IX_2026 - Nama`
-//               (segmen setelah HRD-, huruf besar; sama dengan company_code /data).
+//   - Kode   <- inti nama hasil generate: "SPK_HRD-<KODE>_INT." dari nomor surat
+//               (prefix apa pun di depannya diabaikan — file bisa sudah diedit
+//               manual, cth "24/9 00236_ SPK_HRD-NUMETA_INT..." -> NUMETA).
 //   - Lewati : subfolder, shortcut, file template, gambar "KOP *",
 //               non-PKWT (SK/MEMO/SP), dan file yang tidak dikenali.
 //   - Pindah <- files.update addParents/removeParents: ID & URL dokumen TIDAK
 //               berubah, semua link lama tetap hidup.
 //   - File milik orang lain pindah bila akun ini punya izin edit; kalau tidak
 //               ia masuk daftar "failed" dan dilaporkan (tidak menggagalkan run).
+//
+// Setiap root membawa `sources` (baris config mana yang menunjuk ke sana) supaya
+// folder root yang salah/corrupt mudah dilacak ke Settings / halaman Data.
 
 export const maxDuration = 60;
 
 const FOLDER_MIME = "application/vnd.google-apps.folder";
-// Nama file hasil generate: "00016_ SPK_HRD-MJO_INT.23_IX_2026 - Anindya ..."
-const GENERATED_RE = /^\d+_\s*([A-Za-z]+)_HRD-(.+?)_INT\./;
+// Inti nama file hasil generate: "00016_ SPK_HRD-MJO_INT.23_IX_2026 - Anindya ..."
+// Tanpa jangkar `^` supaya prefix manual di depan (mis. "24/9 ") tidak bikin
+// file gagal dikenali.
+const GENERATED_RE = /([A-Za-z0-9]+)_HRD-([A-Za-z0-9][A-Za-z0-9 _.-]*?)_INT\./;
 
 export async function POST(req) {
   try {
@@ -48,6 +56,7 @@ export async function POST(req) {
     // query Drive meledak jadi 500.
     const templateIds = new Set();
     const roots = new Set();
+    const rootSources = new Map(); // folder ID -> [asal config, ...]
     const invalidRoots = [];
     const addRoot = (raw, source) => {
       const v = String(raw || "").trim();
@@ -55,6 +64,7 @@ export async function POST(req) {
       const id = extractFolderId(v);
       if (id && isValidGoogleId(id)) {
         roots.add(id);
+        rootSources.set(id, [...(rootSources.get(id) || []), source]);
         return true;
       }
       invalidRoots.push({ source, value: v.slice(0, 160) });
@@ -96,6 +106,17 @@ export async function POST(req) {
       }, { status: 400 });
     }
 
+    // ---- Target root opsional: semua file dikumpulkan ke bawah SATU root ----
+    // (default: masing-masing root mengarsipkan file-nya sendiri, di tempat).
+    let targetRoot = null;
+    if (body?.targetRootFolderId) {
+      const id = extractFolderId(body.targetRootFolderId);
+      if (!id || !isValidGoogleId(id)) {
+        return Response.json({ error: "targetRootFolderId tidak valid" }, { status: 400 });
+      }
+      targetRoot = { id, name: await safeFolderName(drive, id) };
+    }
+
     const items = [];
     const rootErrors = [];
     const rootReport = [];
@@ -108,10 +129,16 @@ export async function POST(req) {
         classified = await classifyRoot(drive, rootId, templateIds);
       } catch (e) {
         // Satu root bermasalah tidak boleh membatalkan seluruh laporan.
-        rootErrors.push({ id: rootId, name, error: describeDriveError(e) });
+        rootErrors.push({ id: rootId, name, sources: rootSources.get(rootId) || [], error: describeDriveError(e) });
         continue;
       }
-      rootReport.push({ id: rootId, name, files: classified.length });
+      rootReport.push({ id: rootId, name, files: classified.length, sources: rootSources.get(rootId) || [] });
+
+      const destRootId = targetRoot?.id || rootId;
+      const destRootName = (targetRoot ? targetRoot.name : name) || destRootId;
+      for (const item of classified) {
+        if (item.action === "move") item.targetPath = `${destRootName}/${item.month}/${item.division}`;
+      }
       items.push(...classified);
 
       if (mode !== "execute") continue;
@@ -122,16 +149,15 @@ export async function POST(req) {
       for (const item of classified) {
         if (item.action !== "move") continue;
         try {
-          const monthId = await getOrCreateFolder(session.accessToken, rootId, item.month, memo);
+          const monthId = await getOrCreateFolder(session.accessToken, destRootId, item.month, memo);
           const targetId = await getOrCreateFolder(session.accessToken, monthId, item.division, memo);
           await drive.files.update({
             fileId: item.id,
             addParents: [targetId],
-            removeParents: [rootId],
+            removeParents: [rootId], // root ASAL — aman meski target root berbeda
             fields: "id",
           });
           item.action = "moved";
-          item.targetPath = `${item.month}/${item.division}`;
           if (folderColumnOk) {
             await logFolderLocation(item.id, targetId, item.targetPath, () => { folderColumnOk = false; });
           }
@@ -149,6 +175,7 @@ export async function POST(req) {
       success: summary.failed === 0 && rootErrors.length === 0 && invalidRoots.length === 0,
       mode,
       roots: rootReport,
+      targetRoot,
       rootErrors,
       invalidRoots,
       summary,
