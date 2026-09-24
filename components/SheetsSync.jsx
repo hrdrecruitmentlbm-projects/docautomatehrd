@@ -282,7 +282,7 @@ export function SheetsSync({ initialMasterUrl = "", initialMasterTab = "", initi
               <Input id="payroll-periode" value={payrollPeriode} onChange={(e) => setPayrollPeriode(e.target.value)} placeholder="2026-09" className="font-mono" />
             </div>
           )}
-          <Button onClick={syncPayroll} disabled={busyPayroll || !payrollFolder.trim()} className="bg-blue-600 hover:bg-blue-700">
+          <Button onClick={syncPayroll} disabled={busyPayroll || !payrollFolder.trim()} className="bg-primary hover:bg-primary/90">
             {busyPayroll ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
             Sync Payroll
           </Button>

@@ -156,7 +156,7 @@ export function TopBar({ user, onOpenDrawer, hamburgerRef }) {
             />
           ) : (
             <span
-              className="flex size-7 items-center justify-center rounded-full bg-blue-100 text-xs font-semibold text-blue-700"
+              className="flex size-7 items-center justify-center rounded-full bg-emerald-100 text-xs font-semibold text-emerald-700"
               aria-hidden="true"
             >
               {initial}

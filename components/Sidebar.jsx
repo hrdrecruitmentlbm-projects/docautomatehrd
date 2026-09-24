@@ -48,7 +48,7 @@ function SidebarContent({ onNavigate, onClose }) {
       {/* Logo row */}
       <div className="flex h-12 shrink-0 items-center gap-2.5 px-3">
         <span
-          className="flex size-7 items-center justify-center rounded-md bg-blue-600 text-white"
+          className="flex size-7 items-center justify-center rounded-md bg-primary text-white"
           aria-hidden="true"
         >
           <FilePlus className="size-4" />
@@ -86,14 +86,14 @@ function SidebarContent({ onNavigate, onClose }) {
                       // Drawer needs 44px touch targets; desktop rail uses 36px
                       "flex min-h-11 items-center gap-2.5 rounded-md px-3 text-sm font-medium transition-colors lg:min-h-9",
                       active
-                        ? "bg-blue-600/10 text-blue-700"
+                        ? "bg-primary/10 text-primary"
                         : "text-text-2 hover:bg-surface-2 hover:text-text-1"
                     )}
                   >
                     <item.icon
                       className={cn(
                         "size-4 shrink-0",
-                        active ? "text-blue-700" : "text-text-2"
+                        active ? "text-primary" : "text-text-2"
                       )}
                     />
                     <span className="truncate">{item.label}</span>

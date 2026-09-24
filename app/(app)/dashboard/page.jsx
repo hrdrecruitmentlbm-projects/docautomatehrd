@@ -12,13 +12,13 @@ import {
 } from "lucide-react";
 
 const DOC_TYPE_COLORS = {
-  pkwt: { tile: "bg-blue-100 text-blue-700", bar: "bg-blue-600" },
-  sk: { tile: "bg-emerald-100 text-emerald-700", bar: "bg-emerald-600" },
-  memo: { tile: "bg-amber-100 text-amber-700", bar: "bg-amber-600" },
+  pkwt: { tile: "bg-emerald-100 text-emerald-700", bar: "bg-primary" },
+  sk: { tile: "bg-amber-100 text-amber-700", bar: "bg-amber-600" },
+  memo: { tile: "bg-slate-100 text-slate-700", bar: "bg-slate-600" },
   sp: { tile: "bg-red-100 text-red-700", bar: "bg-red-600" },
 };
 
-const DEFAULT_COLORS = { tile: "bg-surface-3 text-text-2", bar: "bg-blue-600" };
+const DEFAULT_COLORS = { tile: "bg-surface-3 text-text-2", bar: "bg-primary" };
 
 function colorsFor(type) {
   return DOC_TYPE_COLORS[(type || "").toLowerCase()] || DEFAULT_COLORS;
@@ -130,7 +130,7 @@ export default async function NewDashboardPage() {
             </h2>
             <Link
               href="/history"
-              className="text-sm font-medium text-blue-700 hover:underline"
+              className="text-sm font-medium text-primary hover:underline"
             >
               View All
             </Link>
@@ -252,13 +252,19 @@ export default async function NewDashboardPage() {
               </h2>
               <DashboardCharts logs={allLogs} chartType="pie" />
               <ul className="mt-2 space-y-0.5">
-                {typeData.map((d, i) => {
-                  const colors = [ "bg-blue-600", "bg-emerald-600", "bg-amber-600", "bg-red-600" ];
+                {typeData.map((d) => {
+                  // Legend dot bound to type (agrees with donut cells + badges)
+                  const dotColor = {
+                    PKWT: "bg-primary",
+                    SK: "bg-amber-600",
+                    MEMO: "bg-slate-500",
+                    SP: "bg-red-600",
+                  };
                   const pct = totalDocs > 0 ? Math.round((d.value / totalDocs) * 100) : 0;
                   return (
                     <li key={d.name} className="flex h-8 items-center gap-2">
                       <span
-                        className={`size-2 shrink-0 rounded-sm ${colors[i % colors.length]}`}
+                        className={`size-2 shrink-0 rounded-sm ${dotColor[d.name] || "bg-surface-3"}`}
                         aria-hidden="true"
                       />
                       <span className="flex-1 text-sm font-medium text-text-1">{d.name}</span>
@@ -293,7 +299,7 @@ export default async function NewDashboardPage() {
                       aria-hidden="true"
                     >
                       <div
-                        className="h-full rounded-full bg-blue-600 transition-all"
+                        className="h-full rounded-full bg-primary transition-all"
                         style={{ width: `${s.pct}%` }}
                       />
                     </div>
@@ -310,7 +316,7 @@ export default async function NewDashboardPage() {
                 </h2>
                 <Link
                   href="/history"
-                  className="text-sm font-medium text-blue-700 hover:underline"
+                  className="text-sm font-medium text-primary hover:underline"
                 >
                   View All
                 </Link>
@@ -322,7 +328,7 @@ export default async function NewDashboardPage() {
                   {recentActivity.map((log, i) => (
                     <li key={log.id} className="flex items-start gap-3">
                       <div className="flex flex-col items-center">
-                        <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-[11px] font-semibold text-blue-700">
+                        <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-[11px] font-semibold text-primary">
                           {(log.user_email || "?").charAt(0).toUpperCase()}
                         </span>
                         {i < recentActivity.length - 1 && (
@@ -334,7 +340,7 @@ export default async function NewDashboardPage() {
                           href={log.google_doc_url}
                           target="_blank"
                           rel="noreferrer"
-                          className="block truncate text-sm font-medium text-text-1 hover:text-blue-700"
+                          className="block truncate text-sm font-medium text-text-1 hover:text-primary"
                         >
                           {log.employee_name || "Dokumen"}
                         </a>

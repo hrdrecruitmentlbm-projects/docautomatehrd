@@ -7,17 +7,19 @@ import { FileText, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const colorMap = {
-  blue: "bg-blue-50 text-blue-700 border-blue-200",
-  green: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  yellow: "bg-amber-50 text-amber-700 border-amber-200",
-  red: "bg-rose-50 text-rose-700 border-rose-200",
+  // TODO(step-3): DocumentCard is replaced by the folder-strip Files hub;
+  // this interim remap only kills the blue identity for the token commit.
+  blue: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  green: "bg-amber-50 text-amber-700 border-amber-200",
+  yellow: "bg-slate-50 text-slate-700 border-slate-200",
+  red: "bg-red-50 text-red-700 border-red-200",
 };
 
 const iconColorMap = {
-  blue: "text-blue-600 bg-blue-100",
-  green: "text-emerald-600 bg-emerald-100",
-  yellow: "text-amber-600 bg-amber-100",
-  red: "text-rose-600 bg-rose-100",
+  blue: "text-emerald-600 bg-emerald-100",
+  green: "text-amber-600 bg-amber-100",
+  yellow: "text-slate-600 bg-slate-100",
+  red: "text-red-600 bg-red-100",
 };
 
 export function DocumentCard({ config }) {

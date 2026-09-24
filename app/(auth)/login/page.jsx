@@ -10,7 +10,7 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-slate-100">
       <Card className="w-full max-w-md shadow-lg border-0">
         <CardHeader className="text-center space-y-2 pt-8 pb-6 bg-slate-900 rounded-t-xl text-white">
-          <div className="mx-auto bg-blue-600 w-16 h-16 rounded-xl flex items-center justify-center mb-2 shadow-inner">
+          <div className="mx-auto bg-primary w-16 h-16 rounded-xl flex items-center justify-center mb-2 shadow-inner">
             <FileText className="h-8 w-8 text-white" />
           </div>
           <CardTitle className="text-2xl font-bold tracking-tight">DocAuto HR</CardTitle>
@@ -23,7 +23,7 @@ export default function LoginPage() {
             Silakan masuk menggunakan akun Google Workspace perusahaan Anda untuk melanjutkan.
           </p>
           <Button 
-            className="w-full py-6 text-base font-medium bg-white text-slate-800 border-2 border-slate-200 hover:bg-slate-50 hover:text-blue-600 transition-all shadow-sm"
+            className="w-full py-6 text-base font-medium bg-white text-slate-800 border-2 border-slate-200 hover:bg-slate-50 hover:text-primary transition-all shadow-sm"
             onClick={() => signIn("google", { callbackUrl: "/dashboard" })}
           >
             <svg className="w-5 h-5 mr-3" viewBox="0 0 24 24">

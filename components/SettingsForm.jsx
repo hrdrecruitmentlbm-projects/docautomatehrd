@@ -58,14 +58,14 @@ export function SettingsForm({ initialSettings = {} }) {
         <CardHeader className="border-b border-slate-100 bg-slate-50/50 pb-4">
           <CardTitle className="text-lg text-slate-800">Template & Folder Google Drive</CardTitle>
           <CardDescription>
-            Ambil ID dari URL Google Drive: <code className="text-xs bg-slate-200 px-1 py-0.5 rounded text-blue-600">docs.google.com/document/d/INI_ID_NYA/edit</code>
+            Ambil ID dari URL Google Drive: <code className="text-xs bg-slate-200 px-1 py-0.5 rounded text-primary">docs.google.com/document/d/INI_ID_NYA/edit</code>
           </CardDescription>
         </CardHeader>
         <CardContent className="p-6 space-y-8">
           {documentConfigs.map(config => (
             <div key={config.id} className="pt-4 first:pt-0 border-t first:border-0 border-slate-100">
               <h4 className="font-semibold text-slate-700 mb-4 flex items-center">
-                <div className={`w-2 h-2 rounded-full mr-2 bg-blue-500`}></div>
+                <div className={`w-2 h-2 rounded-full mr-2 bg-primary`}></div>
                 Konfigurasi {config.label}
               </h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

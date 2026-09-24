@@ -53,7 +53,7 @@ export default async function HistoryPage() {
                     {new Date(log.created_at).toLocaleDateString('id-ID')}
                   </TableCell>
                   <TableCell>
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 uppercase">
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700 uppercase">
                       {log.document_type}
                     </span>
                   </TableCell>

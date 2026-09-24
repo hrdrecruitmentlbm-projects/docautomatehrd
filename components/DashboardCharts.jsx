@@ -5,15 +5,16 @@ import {
   ResponsiveContainer, PieChart, Pie, Cell
 } from 'recharts';
 
-// Categorical palette from design tokens so charts and badges agree:
-// PKWT blue, SK emerald, Memo amber, SP red.
-const COLORS = [
-  'var(--chart-1)',
-  'var(--chart-2)',
-  'var(--chart-3)',
-  'var(--chart-4)',
-  'var(--chart-5)',
-];
+// Categorical palette bound to TYPE, never to array index, so donut slices
+// always match badges/legend regardless of data insertion order:
+// PKWT brand emerald, SK gold, Memo graphite, SP signal red.
+const TYPE_COLORS = {
+  PKWT: "var(--chart-1)",
+  SK: "var(--chart-2)",
+  MEMO: "var(--chart-3)",
+  SP: "var(--chart-4)",
+};
+const FALL_COLOR = "var(--chart-5)";
 
 function DonutChart({ logs }) {
   const typeCounts = logs.reduce((acc, log) => {
@@ -59,7 +60,7 @@ function DonutChart({ logs }) {
             aria-hidden="true"
           >
             {data.map((entry, index) => (
-              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+              <Cell key={`cell-${index}`} fill={TYPE_COLORS[entry.name] || FALL_COLOR} />
             ))}
           </Pie>
           <Tooltip

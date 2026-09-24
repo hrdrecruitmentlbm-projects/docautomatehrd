@@ -181,7 +181,7 @@ export function PkwtAutoForm() {
                   key={o.nama_key}
                   type="button"
                   onClick={() => pickEmployee(o.nama_key, o.nama_asli)}
-                  className="w-full text-left px-4 py-2.5 hover:bg-blue-50 transition-colors"
+                  className="w-full text-left px-4 py-2.5 hover:bg-surface-2 transition-colors"
                 >
                   <p className="text-sm font-semibold text-slate-800">{o.nama_asli}</p>
                   <p className="text-xs text-slate-500">
@@ -270,7 +270,7 @@ export function PkwtAutoForm() {
         </div>
 
         <div className="pt-2 flex justify-end">
-          <Button type="submit" disabled={isSubmitting || !selectedKey} className="w-full md:w-auto min-w-[200px] bg-blue-600 hover:bg-blue-700">
+          <Button type="submit" disabled={isSubmitting || !selectedKey} className="w-full md:w-auto min-w-[200px] bg-primary hover:bg-primary/90">
             {isSubmitting ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" />Membuat PKWT...</>) : "Buat PKWT Sekarang"}
           </Button>
         </div>

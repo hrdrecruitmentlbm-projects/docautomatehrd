@@ -120,7 +120,7 @@ export function DynamicForm({ config }) {
         </div>
 
         <div className="pt-4 flex justify-end">
-          <Button type="submit" disabled={isSubmitting} className="w-full md:w-auto min-w-[200px] bg-blue-600 hover:bg-blue-700">
+          <Button type="submit" disabled={isSubmitting} className="w-full md:w-auto min-w-[200px] bg-primary hover:bg-primary/90">
             {isSubmitting ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
