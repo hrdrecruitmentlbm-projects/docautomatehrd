@@ -1,6 +1,7 @@
 import { auth } from "@/auth";
 import { supabaseAdmin } from "@/lib/supabase";
 import { SettingsForm } from "@/components/SettingsForm";
+import { MigrateArchive } from "@/components/MigrateArchive";
 
 export default async function SettingsPage() {
   const session = await auth();
@@ -25,6 +26,12 @@ export default async function SettingsPage() {
           real h2/h3 section headings under it (one hierarchy, no skips). */}
       <div className="overflow-hidden rounded-lg border border-border bg-surface-1">
         <SettingsForm initialSettings={initialSettings} />
+      </div>
+
+      {/* Alat sekali pakai: pindahkan PKWT lama ke struktur arsip bulan/divisi.
+          Dipisah kartu sendiri agar bukan bagian dari form Settings (dirty-gate). */}
+      <div className="mt-4 overflow-hidden rounded-lg border border-border bg-surface-1">
+        <MigrateArchive />
       </div>
     </div>
   );
