@@ -1,4 +1,5 @@
 "use client";
+import { readJson } from "@/lib/http";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -61,7 +62,7 @@ export function PkwtAutoForm() {
       const res = await fetch(`/api/employees?q=${encodeURIComponent(term)}&limit=10`, {
         signal: controller.signal,
       });
-      const data = await res.json();
+      const data = await readJson(res);
       if (!res.ok) throw new Error(data.error || "Gagal mencari karyawan");
       setOptions(data.employees || []);
       setActiveIdx(-1);
@@ -120,7 +121,7 @@ export function PkwtAutoForm() {
     setLoadingDetail(true);
     try {
       const res = await fetch(`/api/employee-detail?key=${encodeURIComponent(key)}`);
-      const data = await res.json();
+      const data = await readJson(res);
       if (!res.ok) throw new Error(data.error || "Gagal memuat data karyawan");
       setDetail(data);
     } catch (e) {
@@ -194,7 +195,7 @@ export function PkwtAutoForm() {
           },
         }),
       });
-      const data = await response.json();
+      const data = await readJson(response);
       if (!response.ok) throw new Error(data.error || "Terjadi kesalahan");
       setResult(data);
       toast.success(`PKWT ${data.documentNumber} berhasil dibuat!`);

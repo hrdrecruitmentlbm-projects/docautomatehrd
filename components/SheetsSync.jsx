@@ -1,4 +1,5 @@
 "use client";
+import { readJson } from "@/lib/http";
 
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -57,7 +58,7 @@ export function SheetsSync({
     setLoadingTabs(true);
     try {
       const res = await fetch(`/api/sheet-tabs?spreadsheetId=${encodeURIComponent(masterUrl.trim())}`);
-      const data = await res.json();
+      const data = await readJson(res);
       if (!res.ok) throw new Error(data.error || "Gagal membaca daftar tab");
       setTabs(data.tabs || []);
       const pre = data.suggestedTab || data.tabs?.[0]?.title;
@@ -78,7 +79,7 @@ export function SheetsSync({
       const qs = new URLSearchParams({ sheetUrl: masterUrl.trim() });
       if (tab) qs.set("tab", tab);
       const res = await fetch(`/api/diagnose?${qs.toString()}`);
-      const data = await res.json();
+      const data = await readJson(res);
       setDiagSteps(data.steps || []);
       const failed = (data.steps || []).find((s) => !s.ok);
       if (failed) toast.error(`Gagal di langkah: ${failed.name}`);
@@ -228,7 +229,7 @@ export function SheetsSync({
           ? { sheetUrl: payrollFolder.trim(), periode_bulan: payrollPeriode }
           : { folderUrl: payrollFolder.trim() }),
       });
-      const data = await res.json();
+      const data = await readJson(res);
       if (!res.ok) throw new Error(data.error || "Gagal sinkron payroll");
       setPayrollResult(data);
       toast.success(`${data.matched}/${data.total} payroll cocok (${data.periode_bulan})`);

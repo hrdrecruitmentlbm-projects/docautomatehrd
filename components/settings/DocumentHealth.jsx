@@ -1,4 +1,5 @@
 "use client";
+import { readJson } from "@/lib/http";
 
 import * as React from "react";
 import { toast } from "sonner";
@@ -42,7 +43,7 @@ export function DocumentHealth() {
     setAuditError(null);
     try {
       const res = await fetch("/api/template-audit");
-      const data = await res.json();
+      const data = await readJson(res);
       if (!res.ok) throw new Error(data.error || "Gagal memeriksa template");
       setAudit(data);
       if (data.summary.bermasalah === 0) {
@@ -77,7 +78,7 @@ export function DocumentHealth() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ offset }),
         });
-        const data = await res.json();
+        const data = await readJson(res);
         if (!res.ok) throw new Error(data.error || "Pemeriksaan gagal");
 
         scanned += data.scanned || 0;

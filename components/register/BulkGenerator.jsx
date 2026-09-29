@@ -1,4 +1,5 @@
 "use client";
+import { readJson } from "@/lib/http";
 
 import * as React from "react";
 import Link from "next/link";
@@ -106,7 +107,7 @@ export default function BulkGenerator() {
           const res = await fetch(
             `/api/register/employees?keys=${encodeURIComponent(chunk.join(","))}`
           );
-          const data = await res.json();
+          const data = await readJson(res);
           if (!res.ok) throw new Error(data.error || "Gagal memuat data karyawan");
           out.push(...(data.employees || []));
         }
@@ -182,7 +183,7 @@ export default function BulkGenerator() {
         },
       }),
     });
-    const data = await res.json();
+    const data = await readJson(res);
     if (!res.ok) throw new Error(data.error || "Gagal membuat dokumen");
     return data;
   };

@@ -1,4 +1,5 @@
 "use client";
+import { readJson } from "@/lib/http";
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -18,7 +19,7 @@ export function CompanyMapForm() {
     (async () => {
       try {
         const res = await fetch("/api/company-map");
-        const data = await res.json();
+        const data = await readJson(res);
         if (!res.ok) throw new Error(data.error || "Gagal memuat pemetaan");
         setRows(data.mappings || []);
       } catch (e) {
@@ -43,7 +44,7 @@ export function CompanyMapForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mappings: rows }),
       });
-      const data = await res.json();
+      const data = await readJson(res);
       if (!res.ok) throw new Error(data.error || "Gagal menyimpan");
       toast.success(`${data.total} baris pemetaan tersimpan`);
     } catch (e) {

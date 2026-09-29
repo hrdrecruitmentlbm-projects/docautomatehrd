@@ -1,4 +1,5 @@
 "use client";
+import { readJson } from "@/lib/http";
 
 import { useState } from "react";
 import { useForm } from "react-hook-form";
@@ -65,7 +66,7 @@ export function DynamicForm({ config }) {
         }),
       });
 
-      const resultData = await response.json();
+      const resultData = await readJson(response);
 
       if (!response.ok) {
         throw new Error(resultData.error || "Terjadi kesalahan");

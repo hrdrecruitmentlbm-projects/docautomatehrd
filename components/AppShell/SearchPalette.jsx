@@ -1,4 +1,5 @@
 "use client";
+import { readJson } from "@/lib/http";
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
@@ -70,7 +71,7 @@ export function SearchPalette({ open, onOpenChange }) {
         signal: controller.signal,
       });
       if (!res.ok) throw new Error(`Search failed (${res.status})`);
-      const json = await res.json();
+      const json = await readJson(res);
       setResults(json.results || []);
     } catch (err) {
       if (err.name === "AbortError") return;

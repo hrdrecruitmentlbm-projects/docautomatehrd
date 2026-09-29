@@ -5,6 +5,16 @@ import { copyTemplate, replacePlaceholders, buildDocUrl } from "@/lib/google";
 import { generateDocumentNumber } from "@/lib/auto-numbering";
 import { generatePkwt } from "@/lib/generate-pkwt";
 
+// WAJIB: rantai ini memanggil Google Docs API beberapa kali — copy template,
+// batchUpdate penanda, insert gambar KOP, docs.get untuk pemeriksaan hasil,
+// lalu insert log. Semua query Google, tidak ada yang bisa dilewati.
+// Tanpa deklarasi ini Vercel Hobby memakai default 10 detik, dan fungsi
+// mati di tengah: dokumen bisa sudah ada di Drive sedangkan log belum —
+// pengguna lihat "Unexpected end of JSON input" dan berpikir gagal padahal
+// dokumennya tercipta. Route Google berat lain di repo ini sudah 60 detik
+// (sync-master, sync-payroll, diagnose, template-audit, backfill).
+export const maxDuration = 60;
+
 export async function POST(req) {
   try {
     const session = await auth();

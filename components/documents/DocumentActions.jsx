@@ -1,4 +1,5 @@
 "use client";
+import { readJson } from "@/lib/http";
 
 import * as React from "react";
 import Link from "next/link";
@@ -138,7 +139,7 @@ export function DocumentActions({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id }),
       });
-      const data = await res.json();
+      const data = await readJson(res);
       if (!res.ok) throw new Error(data.error || "Gagal memeriksa dokumen");
       if (!data.persisted) {
         toast.warning("Hasil pemeriksaan tidak tersimpan — jalankan supabase/pkwt-contract.sql");
@@ -169,7 +170,7 @@ export function DocumentActions({
           jangka_bulan: Number(dupTerm),
         }),
       });
-      const data = await res.json();
+      const data = await readJson(res);
       if (!res.ok) throw new Error(data.error || "Gagal membuat salinan");
       setDupOpen(false);
       toast.success(`Salinan dibuat: ${data.documentNumber}`);
