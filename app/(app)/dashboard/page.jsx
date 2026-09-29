@@ -45,44 +45,53 @@ export default async function NewDashboardPage() {
 
   const pkwt = (q) => q.eq("document_type", "pkwt");
 
-  const [
-    expiringQ,
-    expiredQ,
-    monthQ,
-    monthMineQ,
-    totalQ,
-    empCountQ,
-    payCountQ,
-    empKeysQ,
-    contractKeysQ,
-    trendQ,
-    recentQ,
-  ] = await Promise.all([
-    pkwt(
+  // DUA GELOMBANG, bukan sebelas sekaligus.
+  //
+  // PostgREST punya pool default 10 koneksi dengan timeout antrean ~1
+  // detik. Versi pertama dashboard menembakkan sebelas query paralel, dan
+  // bersama dua query dari getSyncStatus di layout menjadi 14 — melewati
+  // pool, sehingga lambda yang baru start bisa dapat 503 dan seluruh
+  // halaman mati. Gelombang pertama = head-count murah untuk KPI.
+  const [expiringQ, expiredQ, monthQ, monthMineQ, totalQ, empCountQ, payCountQ, recentQ] =
+    await Promise.all([
+      pkwt(
+        supabaseAdmin
+          .from("document_logs")
+          .select("id", { count: "exact", head: true })
+          .gte("tanggal_berakhir", today)
+          .lte("tanggal_berakhir", soon)
+      ),
+      pkwt(
+        supabaseAdmin
+          .from("document_logs")
+          .select("id", { count: "exact", head: true })
+          .lt("tanggal_berakhir", today)
+      ),
       supabaseAdmin
         .from("document_logs")
         .select("id", { count: "exact", head: true })
-        .gte("tanggal_berakhir", today)
-        .lte("tanggal_berakhir", soon)
-    ),
-    pkwt(
+        .gte("created_at", monthStart),
       supabaseAdmin
         .from("document_logs")
         .select("id", { count: "exact", head: true })
-        .lt("tanggal_berakhir", today)
-    ),
-    supabaseAdmin
-      .from("document_logs")
-      .select("id", { count: "exact", head: true })
-      .gte("created_at", monthStart),
-    supabaseAdmin
-      .from("document_logs")
-      .select("id", { count: "exact", head: true })
-      .gte("created_at", monthStart)
-      .eq("user_email", email || "__none__"),
-    supabaseAdmin.from("document_logs").select("id", { count: "exact", head: true }),
-    supabaseAdmin.from("employees").select("nama_key", { count: "exact", head: true }),
-    supabaseAdmin.from("payroll_latest").select("nama_key", { count: "exact", head: true }),
+        .gte("created_at", monthStart)
+        .eq("user_email", email || "__none__"),
+      supabaseAdmin.from("document_logs").select("id", { count: "exact", head: true }),
+      supabaseAdmin.from("employees").select("nama_key", { count: "exact", head: true }),
+      supabaseAdmin.from("payroll_latest").select("nama_key", { count: "exact", head: true }),
+      supabaseAdmin
+        .from("document_logs")
+        .select(
+          "id,employee_name,document_type,created_at,google_doc_url,document_number,user_email,tanggal_berakhir,unfilled_marks"
+        )
+        .order("created_at", { ascending: false })
+        .limit(RECENT_ROWS),
+    ]);
+
+  // Gelombang kedua: yang mengambil banyak baris, dan hanya dibutuhkan
+  // untuk "Belum ada kontrak" + grafik. Berjalan setelah gelombang pertama
+  // supaya tidak berebut koneksi.
+  const [empKeysQ, contractKeysQ, trendQ] = await Promise.all([
     supabaseAdmin.from("employees").select("nama_key").limit(KEY_CAP),
     supabaseAdmin
       .from("document_logs")
@@ -94,19 +103,31 @@ export default async function NewDashboardPage() {
       .select("id,created_at,lini_bisnis")
       .order("created_at", { ascending: false })
       .limit(TREND_ROWS),
-    supabaseAdmin
-      .from("document_logs")
-      .select(
-        "id,employee_name,document_type,created_at,google_doc_url,document_number,user_email,tanggal_berakhir,unfilled_marks"
-      )
-      .order("created_at", { ascending: false })
-      .limit(RECENT_ROWS),
   ]);
 
-  // Hanya kegagalan data karyawan yang menjatuhkan halaman; sisanya
-  //emptyset ke 0 daripada menampilkan dashboard kosong.
-  if (empCountQ.error) {
-    throw new Error(`Gagal memuat data karyawan: ${empCountQ.error.message}`);
+  // TIDAK melempar. Versi lama melempar begitu satu query gagal, dan
+  // hasilnya halaman mati yang tidak memberi petunjuk apa pun. Sekarang
+  // setiap kegagalan dicatat, angkanya jadi 0, dan Dashboard menampilkan
+  // pita peringatan yang menyebut query mana yang bermasalah — sehingga
+  // "database tidak bisa dijangkau" dan "benar-benar tidak ada data"
+  // tidak terlihat sama.
+  const failed = [
+    ["employees", empCountQ],
+    ["payroll_latest", payCountQ],
+    ["document_logs (jumlah)", totalQ],
+    ["document_logs (segera berakhir)", expiringQ],
+    ["document_logs (kedaluwarsa)", expiredQ],
+    ["document_logs (bulan ini)", monthQ],
+    ["document_logs (karyawan)", empKeysQ],
+    ["document_logs (kontrak karyawan)", contractKeysQ],
+    ["document_logs (tren)", trendQ],
+    ["document_logs (terbaru)", recentQ],
+  ]
+    .filter(([, q]) => q.error)
+    .map(([label, q]) => `${label}: ${q.error.message}`);
+
+  if (failed.length) {
+    console.error("Dashboard queries failed:\n" + failed.join("\n"));
   }
 
   const employees = empCountQ.count || 0;
@@ -155,6 +176,7 @@ export default async function NewDashboardPage() {
         .sort((a, b) => b.value - a.value)
         .slice(0, 10)}
       recent={recentQ.data || []}
+      queryErrors={failed}
       truncated={(empKeysQ.data || []).length >= KEY_CAP}
     />
   );

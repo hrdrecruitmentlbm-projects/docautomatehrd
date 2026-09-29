@@ -84,7 +84,7 @@ function KpiCard({ label, value, context, href, icon: Icon, tone = "brand" }) {
   );
 }
 
-export function DashboardRevamp({ now, kpis, trend, byLine, recent, truncated }) {
+export function DashboardRevamp({ now, kpis, trend, byLine, recent, truncated, queryErrors }) {
   const [selectedLine, setSelectedLine] = React.useState(null);
 
   const visibleRecent = React.useMemo(() => {
@@ -107,6 +107,30 @@ export function DashboardRevamp({ now, kpis, trend, byLine, recent, truncated })
           </p>
         </div>
       </header>
+
+      {/* Angka di bawah mungkin 0 karena datanya tidak termuat, bukan karena
+          memang tidak ada. Bedakan keduanya secara eksplisit. */}
+      {queryErrors?.length > 0 && (
+        <div role="alert" className="rounded-md border border-red-300 bg-red-50 p-4 text-sm">
+          <p className="flex items-center gap-2 font-semibold text-red-900">
+            <TriangleAlert className="size-4 shrink-0" aria-hidden="true" />
+            {queryErrors.length} data gagal dimuat — angka di bawah mungkin tidak akurat
+          </p>
+          <ul className="mt-2 space-y-1 text-xs text-red-800">
+            {queryErrors.map((e) => (
+              <li key={e} className="break-words font-mono">
+                {e}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-xs text-red-800">
+            Kalau ini muncul, cek Supabase di Vercel:{" "}
+            <span className="font-mono">SUPABASE_SERVICE_ROLE_KEY</span> dan{" "}
+            <span className="font-mono">NEXT_PUBLIC_SUPABASE_URL</span> harus
+            terisi untuk environment ini.
+          </p>
+        </div>
+      )}
 
       {/* KPI band — semua angka exact count dari server, tiap kartu navigating. */}
       <section aria-label="Yang perlu ditangani" className="space-y-2">

@@ -158,7 +158,6 @@ const rest = (path, init = {}) =>
     if (p.to.jangka_bulan) patch.jangka_bulan = p.to.jangka_bulan;
     if (!Object.keys(patch).length) continue;
 
-    // eslint-disable-next-line no-await-in-loop
     const r = await rest(`document_logs?id=eq.${p.id}`, {
       method: "PATCH",
       body: JSON.stringify(patch),
