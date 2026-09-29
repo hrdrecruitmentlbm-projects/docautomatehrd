@@ -9,7 +9,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { relativeTime } from "@/lib/sync-status";
+// PENTING: dari lib/format, BUKAN lib/sync-status. Yang terakhir membuat
+// Supabase client, dan mengimpornya dari Client Component menarik seluruh
+// SDK ke browser — dropdown pil status jadi crash saat dibuka.
+import { relativeTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 /**
