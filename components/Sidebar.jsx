@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
   FilePlus,
+  ClipboardCheck,
   Database,
   History,
   Settings,
@@ -14,8 +15,10 @@ import {
 
 /**
  * Nav groups (locked labels: EN nav / ID pages).
- * match lets /generate/[type] light up "Documents" (child flow of
- * Documents, not its own destination).
+ * match lets /generate/[type] and /input-dokumen/[id] light up "Documents"
+ * (child flow of Documents, not new destinations). "Kontrak" is its own
+ * seat: it is the register of who HAS a contract, which is a different
+ * question from "what documents exist".
  */
 const NAV_GROUPS = [
   {
@@ -23,6 +26,7 @@ const NAV_GROUPS = [
     items: [
       { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard", match: ["/dashboard"] },
       { href: "/input-dokumen", icon: FilePlus, label: "Documents", match: ["/input-dokumen", "/generate"] },
+      { href: "/kontrak", icon: ClipboardCheck, label: "Kontrak", match: ["/kontrak"] },
       { href: "/data", icon: Database, label: "Data Karyawan", match: ["/data"] },
       { href: "/history", icon: History, label: "Activity", match: ["/history"] },
     ],

@@ -1,10 +1,9 @@
 import { auth } from "@/auth";
 import { supabase, supabaseAdmin } from "@/lib/supabase";
 import { getDocumentConfig } from "@/lib/document-configs";
-import { copyTemplate, replacePlaceholders, buildDocUrl, insertKopImage } from "@/lib/google";
+import { copyTemplate, replacePlaceholders, buildDocUrl } from "@/lib/google";
 import { generateDocumentNumber } from "@/lib/auto-numbering";
-import { getOrCreateFolder } from "@/lib/drive-folders";
-import { resolveCompany, buildPkwtReplacements, addMonths, formatTanggalId, formatMonthYearId } from "@/lib/pkwt";
+import { generatePkwt } from "@/lib/generate-pkwt";
 
 export async function POST(req) {
   try {
@@ -115,186 +114,16 @@ export async function POST(req) {
   }
 }
 
+/**
+ * PKWT otomatis. Logikanya hidup di lib/generate-pkwt.js supaya
+ * "Buat Salinan" memakai jalur yang persis sama — bukan salinan kode
+ * yang bisa melenceng diam-diam.
+ */
 async function handlePkwtAuto({ session, settings, employeeKey, manual = {} }) {
-  const key = String(employeeKey || "").toLowerCase().trim();
-  if (!key) return Response.json({ error: "employeeKey wajib diisi" }, { status: 400 });
-
-  const { data: employee, error: empError } = await supabaseAdmin
-    .from("employees")
-    .select("*")
-    .eq("nama_key", key)
-    .single();
-  if (empError || !employee) {
-    return Response.json({ error: "Karyawan tidak ditemukan di database. Impor master dulu di halaman Data." }, { status: 404 });
+  const result = await generatePkwt({ session, settings, employeeKey, manual });
+  if (!result.ok) {
+    return Response.json({ error: result.error }, { status: result.status });
   }
-
-  const { data: payroll } = await supabaseAdmin
-    .from("payroll_latest")
-    .select("*")
-    .eq("nama_key", key)
-    .single();
-
-  const liniBisnis = employee.lini_bisnis || "";
-  const { data: mapping } = await supabaseAdmin
-    .from("company_map")
-    .select("*")
-    .eq("lini_bisnis", liniBisnis.toUpperCase().trim())
-    .single();
-  const { data: fallbackMap } = await supabaseAdmin
-    .from("company_map")
-    .select("*")
-    .eq("lini_bisnis", "__FALLBACK__")
-    .single();
-
-  const resolved = resolveCompany(liniBisnis);
-  const mappedCode = mapping?.company_code || null;
-  const hasKop = !!mappedCode || resolved.hasKop;
-  const companyCode = mappedCode || resolved.companyCode;
-  // Penomoran: pakai kode KOP bila ada, sonst nama lini bisnis mentah (cth: HRD-SAHAM).
-  const numberingCode = hasKop ? companyCode : (liniBisnis || "UMUM");
-
-  // Template: per-perusahaan bila ada KOP, sonst fallback generik (tanpa KOP).
-  const templateId = hasKop
-    ? (mapping?.pkwt_template_id || fallbackMap?.pkwt_template_id || settings?.pkwt_template_id)
-    : (fallbackMap?.pkwt_template_id || settings?.pkwt_template_id);
-  const folderId = hasKop
-    ? (mapping?.pkwt_folder_id || fallbackMap?.pkwt_folder_id || settings?.pkwt_folder_id)
-    : (fallbackMap?.pkwt_folder_id || settings?.pkwt_folder_id);
-
-  if (!templateId || !folderId) {
-    return Response.json({
-      error: hasKop
-        ? `Template PKWT untuk ${companyCode} belum dikonfigurasi. Isi di halaman Data > Pemetaan Perusahaan (atau Settings sebagai fallback).`
-        : "Template generik (tanpa KOP) belum dikonfigurasi. Isi fallback di halaman Data > Pemetaan Perusahaan baris __FALLBACK__ (atau Settings).",
-    }, { status: 400 });
-  }
-
-  // Input manual yang tersisa: tanggal_mulai, periode/jangka, tanggal_ttd.
-  const tanggalMulaiRaw = manual.tanggal_mulai;
-  if (!tanggalMulaiRaw) {
-    return Response.json({ error: "tanggal_mulai wajib diisi" }, { status: 400 });
-  }
-  const jangkaBulan = parseInt(manual.jangka_bulan || manual.jangka_waktu || "0", 10) || 0;
-  let tanggalBerakhirRaw = manual.tanggal_berakhir;
-  if (!tanggalBerakhirRaw && jangkaBulan > 0) {
-    tanggalBerakhirRaw = addMonths(new Date(tanggalMulaiRaw), jangkaBulan).toISOString().slice(0, 10);
-  }
-  const periodeKontrak = manual.periode_kontrak
-    || (jangkaBulan > 0 ? `${jangkaBulan} Bulan` : "");
-  const tanggalTtdRaw = manual.tanggal_ttd || new Date().toISOString().slice(0, 10);
-
-  const documentNumber = await generateDocumentNumber("pkwt", numberingCode);
-  const sequenceNumber = parseInt(documentNumber.split("/")[0], 10);
-
-  const replacements = buildPkwtReplacements({
-    employee,
-    payroll: payroll || {},
-    manual: {
-      tanggal_mulai: tanggalMulaiRaw,
-      tanggal_berakhir: tanggalBerakhirRaw || "",
-      periode_kontrak: periodeKontrak,
-      tanggal_ttd: tanggalTtdRaw,
-    },
-    documentNumber,
-    companyLegal: mapping?.legal_name || companyCode,
-  });
-  // Pihak Pertama selalu hardcode di template (Dena Kurniawan) — tidak dioverride.
-
-  const displayName = employee.nama_asli || "Document";
-  const fileName = `${documentNumber.replace(/\//g, "_")} - ${displayName}`;
-
-  // ---- Arsip PKWT: HRIS PKWT/<Bulan Tahun>/<KODE PERUSAHAAN> ----
-  // Bulan = tanggal pembuatan (sama dengan dasar nomor surat).
-  // Kode = company_code dari /data (company_map); baris tanpa KOP memakai
-  // lini_bisnis mentah -> selalu sama dengan segmen HRD-XXX di nomor surat.
-  // Gagal menyiapkan arsip TIDAK boleh membatalkan dokumen: fallback ke
-  // folder root dengan catatan di respons.
-  let targetFolderId = folderId;
-  let folderPath = null;
-  let folderNote = "";
-  try {
-    const monthFolder = formatMonthYearId(new Date());
-    const divisionFolder = String(numberingCode || "UMUM").toUpperCase();
-    const memo = new Map();
-    const monthFolderId = await getOrCreateFolder(session.accessToken, folderId, monthFolder, memo);
-    targetFolderId = await getOrCreateFolder(session.accessToken, monthFolderId, divisionFolder, memo);
-    folderPath = `${monthFolder}/${divisionFolder}`;
-  } catch (e) {
-    console.error("Archive folder resolution failed, falling back to root folder:", e);
-    targetFolderId = folderId;
-    folderPath = null;
-    folderNote = `Folder arsip gagal dibuat (${e.message}) — dokumen disimpan di folder root.`;
-  }
-
-  const docId = await copyTemplate(session.accessToken, templateId, fileName, targetFolderId);
-  await replacePlaceholders(session.accessToken, docId, replacements);
-
-  // KOP otomatis: sisipkan gambar perusahaan di tanda {{kop}}, lalu hapus tanda.
-  let kop = { inserted: false, note: "" };
-  try {
-    kop = await insertKopImage(session.accessToken, docId, {
-      companyCode: hasKop ? companyCode : "",
-      hasKop,
-    });
-  } catch (e) {
-    kop = { inserted: false, note: `KOP gagal diproses: ${e.message}` };
-  }
-
-  const docUrl = buildDocUrl(docId);
-
-  const formSnapshot = {
-    source: "pkwt-auto",
-    employee_nama_key: key,
-    tanggal_mulai: formatTanggalId(tanggalMulaiRaw),
-    tanggal_berakhir: formatTanggalId(tanggalBerakhirRaw),
-    periode_kontrak: periodeKontrak,
-    tanggal_ttd: formatTanggalId(tanggalTtdRaw),
-    payroll_periode: payroll?.periode_bulan || null,
-    employee,
-    payroll: payroll || null,
-  };
-
-  // Insert log: coba dengan kolom audit baru, fallback ke skema lama bila migrasi belum jalan.
-  const baseRow = {
-    user_email: session.user.email,
-    document_type: "pkwt",
-    document_number: documentNumber,
-    sequence_number: sequenceNumber,
-    company_code: numberingCode,
-    employee_name: displayName,
-    google_doc_id: docId,
-    google_doc_url: docUrl,
-    form_data: formSnapshot,
-  };
-  let logError = null;
-  const withAudit = await supabaseAdmin.from("document_logs").insert({
-    ...baseRow,
-    employee_nama_key: key,
-    lini_bisnis: liniBisnis,
-    periode_bulan: payroll?.periode_bulan || null,
-    folder_id: targetFolderId,
-    folder_path: folderPath,
-  });
-  if (withAudit.error && /column/i.test(withAudit.error.message || "")) {
-    const retry = await supabaseAdmin.from("document_logs").insert(baseRow);
-    logError = retry.error;
-  } else {
-    logError = withAudit.error;
-  }
-  if (logError) console.error("Failed to log PKWT generation:", logError);
-
-  return Response.json({
-    success: true,
-    docUrl,
-    docId,
-    documentNumber,
-    companyCode: numberingCode,
-    folderPath,
-    folderId: targetFolderId,
-    folderNote,
-    hasKop,
-    needsManualKop: !hasKop,
-    kopInserted: kop.inserted,
-    kopNote: kop.note,
-  });
+  const { ok, ...payload } = result;
+  return Response.json(payload);
 }

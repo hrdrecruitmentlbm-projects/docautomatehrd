@@ -1,7 +1,8 @@
 import { supabaseAdmin } from "@/lib/supabase";
 import Link from "next/link";
-import { FileText, ExternalLink, Inbox, FolderOpen } from "lucide-react";
-import { CopyLinkButton } from "@/components/documents/CopyLinkButton";
+import { FileText, Inbox, FolderOpen, ArrowUpDown } from "lucide-react";
+import { DocumentActions } from "@/components/documents/DocumentActions";
+import { ContractStateDot } from "@/components/documents/DocumentStatus";
 
 /**
  * Documents hub: folder strip + Files table.
@@ -23,11 +24,22 @@ const VALID_TYPES = ["semua", "pkwt", "sk", "memo", "sp"];
 const VALID_SORTS = ["tanggal-desc", "tanggal-asc", "nama-asc", "nama-desc"];
 const PAGE_SIZE = 25;
 const MAX_ROWS = 50; // never render more than this without virtualization
+// Nama karyawan sudah tampil di sel pertama, jadi kolom "Nama" terpisah
+// dihapus. Sortir lewat header kolom "Tanggal" saja, atau lewat tombol
+// sortir di panel kepala.
 const COLUMNS =
-  "id, employee_name, document_type, user_email, created_at, google_doc_url, document_number";
+  "id, employee_name, document_type, user_email, created_at, google_doc_url, document_number, folder_id, tanggal_berakhir, status_dokumen, unfilled_marks";
 
-function buildHref({ type, sort, load }) {
-  const params = new URLSearchParams();
+/**
+ * Jam dinding di balik helper module-scope: React compiler melarang
+ * Date.now() langsung di body render, tapi mengizinkan pemanggilan lewat
+ * helper (pola yang sama di app/(app)/dashboard/page.jsx).
+ */
+function renderNow() {
+  return Date.now();
+}
+
+function buildHref({ type, sort, load }) {  const params = new URLSearchParams();
   if (type && type !== "semua") params.set("type", type);
   if (sort && sort !== "tanggal-desc") params.set("sort", sort);
   if (load && load > 1) params.set("load", String(load));
@@ -91,6 +103,12 @@ export default async function DocumentsHubPage({ searchParams }) {
   const sortState = (key) =>
     sort.startsWith(key) ? (sort.endsWith("asc") ? "ascending" : "descending") : "none";
 
+  // Jam acuan untuk badge masa kontrak. Jam dinding dipanggil lewat
+  // helper module-scope: React compiler melarang Date.now() langsung di
+  // render, tapi mengizinkan helper (pola yang sama dipakai
+  // app/(app)/dashboard/page.jsx).
+  const now = renderNow();
+
   return (
     <div className="space-y-4">
       {/* Folder strip: ONE bordered panel, hairline grid via gap-px on the
@@ -150,28 +168,59 @@ export default async function DocumentsHubPage({ searchParams }) {
           </div>
 
           {/* Filter pills: same ?type= state as the folder strip */}
-          <nav aria-label="Filter jenis dokumen" className="-mx-1 flex max-w-full gap-1 overflow-x-auto px-1">
+          <nav
+            aria-label="Filter jenis dokumen"
+            className="-mx-1 flex max-w-full gap-1 overflow-x-auto px-1"
+          >
             {[
               { t: "semua", label: "Semua", count: totalCount },
               ...Object.entries(TYPE_META).map(([t, m]) => ({ t, label: m.label, count: counts[t] })),
             ].map((p) => {
-              const isActive = activeType === p.t;
-              return (
-                <Link
-                  key={p.t}
-                  href={buildHref({ type: p.t, sort })}
-                  aria-current={isActive ? "true" : undefined}
-                  className={`flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-[13px] font-medium transition-colors ${
-                    isActive
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-surface-2 text-text-2 hover:bg-surface-3 hover:text-text-1"
-                  }`}
-                >
-                  {p.label}
-                  <span className="tabular opacity-70">{p.count.toLocaleString("id-ID")}</span>
-                </Link>
-              );
-            })}
+            const isActive = activeType === p.t;
+            return (
+              <Link
+                key={p.t}
+                href={buildHref({ type: p.t, sort })}
+                aria-current={isActive ? "true" : undefined}
+                className={`flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-[13px] font-medium transition-colors ${
+                  isActive
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-surface-2 text-text-2 hover:bg-surface-3 hover:text-text-1"
+                }`}
+              >
+                {p.label}
+                <span className="tabular opacity-70">{p.count.toLocaleString("id-ID")}</span>
+              </Link>
+            );
+          })}
+          </nav>
+
+          {/* Sortir nama pindah ke sini: kolom "Nama" dihapus karena isinya
+              sudah tampil di sel pertama, jadi mengulangnya cuma membingungkan. */}
+          <nav
+            aria-label="Urutan dokumen"
+            className="-mx-1 flex max-w-full items-center gap-1 overflow-x-auto px-1"
+          >
+            <ArrowUpDown className="size-3.5 shrink-0 text-text-2" aria-hidden="true" />
+            {[
+              { s: "tanggal-desc", label: "Terbaru" },
+              { s: "tanggal-asc", label: "Terlama" },
+              { s: "nama-asc", label: "Nama A-Z" },
+              { s: "nama-desc", label: "Nama Z-A" },
+            ].map((o) => (
+              <Link
+                key={o.s}
+                href={sortHref(o.s)}
+                aria-current={sort === o.s ? "true" : undefined}
+                className={`flex h-8 shrink-0 items-center rounded-md px-2.5 text-[13px] font-medium transition-colors ${
+                  sort === o.s
+                    ? "bg-surface-3 text-text-1"
+                    : "text-text-2 hover:bg-surface-2 hover:text-text-1"
+                }`}
+              >
+                {o.label}
+              </Link>
+            ))}
           </nav>
         </div>
 
@@ -238,15 +287,8 @@ export default async function DocumentsHubPage({ searchParams }) {
                         )}
                       </Link>
                     </th>
-                    <th scope="col" aria-sort={sortState("nama")} className="px-4 py-2.5 text-left">
-                      <Link href={sortHref(sort === "nama-asc" ? "nama-desc" : "nama-asc")} className="inline-flex items-center gap-1 hover:text-text-1">
-                        Nama
-                        {sort.startsWith("nama") && (
-                          <span aria-hidden="true">{sort.endsWith("asc") ? "↑" : "↓"}</span>
-                        )}
-                      </Link>
-                    </th>
-                    <th scope="col" className="hidden px-4 py-2.5 text-left md:table-cell">Pembuat</th>
+                    <th scope="col" className="hidden px-4 py-2.5 text-left md:table-cell">Kontrak</th>
+                    <th scope="col" className="hidden px-4 py-2.5 text-left lg:table-cell">Pembuat</th>
                     <th scope="col" className="px-4 py-2.5 text-right">Aksi</th>
                   </tr>
                 </thead>
@@ -290,25 +332,26 @@ export default async function DocumentsHubPage({ searchParams }) {
                         <td className="px-4 py-2.5 tabular text-text-2">
                           <time dateTime={log.created_at}>{dateStr}</time>
                         </td>
-                        <td className="px-4 py-2.5 text-text-2">
-                          <span className="block max-w-[160px] truncate">{log.employee_name || "-"}</span>
+                        <td className="hidden px-4 py-2.5 md:table-cell">
+                          {t === "pkwt" ? (
+                            <ContractStateDot tanggalBerakhir={log.tanggal_berakhir} now={now} />
+                          ) : (
+                            <span className="text-xs text-text-2">-</span>
+                          )}
                         </td>
-                        <td className="hidden max-w-[180px] truncate px-4 py-2.5 text-text-2 md:table-cell">
+                        <td className="hidden max-w-[180px] truncate px-4 py-2.5 text-text-2 lg:table-cell">
                           {log.user_email}
                         </td>
                         <td className="px-4 py-2.5">
-                          <div className="flex items-center justify-end gap-1">
-                            <CopyLinkButton url={log.google_doc_url} />
-                            <a
-                              href={log.google_doc_url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="relative inline-flex size-9 items-center justify-center rounded-md text-text-2 transition-colors hover:bg-surface-2 hover:text-text-1 after:absolute after:-inset-1 after:content-['']"
-                              aria-label={`Buka ${log.employee_name || "dokumen"} di Google Docs`}
-                            >
-                              <ExternalLink className="size-4" aria-hidden="true" />
-                            </a>
-                          </div>
+                          <DocumentActions
+                            id={log.id}
+                            docUrl={log.google_doc_url}
+                            folderId={log.folder_id}
+                            documentType={t}
+                            tanggalMulai={log.tanggal_mulai}
+                            jangkaBulan={log.jangka_bulan}
+                            unfilled={log.unfilled_marks}
+                          />
                         </td>
                       </tr>
                     );

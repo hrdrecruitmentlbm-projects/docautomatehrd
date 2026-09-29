@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { resolveRouteMeta } from "@/lib/route-meta";
 import { SearchPalette } from "@/components/AppShell/SearchPalette";
+import { SyncStatus } from "@/components/AppShell/SyncStatus";
 
 /**
  * The app shell's sticky top bar (h-14).
@@ -32,7 +33,7 @@ import { SearchPalette } from "@/components/AppShell/SearchPalette";
  * search trigger (Cmd/Ctrl+K), the route's primary action, and the single
  * avatar menu (Settings + Log Out) that replaces all per-page user chips.
  */
-export function TopBar({ user, onOpenDrawer, hamburgerRef }) {
+export function TopBar({ user, sync, onOpenDrawer, hamburgerRef }) {
   const pathname = usePathname();
   const router = useRouter();
   const meta = resolveRouteMeta(pathname);
@@ -98,6 +99,9 @@ export function TopBar({ user, onOpenDrawer, hamburgerRef }) {
           <div aria-hidden="true" />
         )}
       </div>
+
+      {/* Sync status — only renders when data needs attention */}
+      <SyncStatus sync={sync} />
 
       {/* Search trigger */}
       <button

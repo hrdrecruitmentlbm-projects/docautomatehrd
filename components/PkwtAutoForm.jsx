@@ -9,6 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { CheckCircle2, FileDown, Loader2, Search, TriangleAlert, AlertTriangle, RotateCcw, ArrowRight, Check } from "lucide-react";
 import { formatRp, formatTanggalId, addMonths } from "@/lib/pkwt";
+import { EmployeeSnapshot } from "@/components/documents/EmployeeSnapshot";
+import { UnfilledMarksWarning } from "@/components/documents/UnfilledMarksWarning";
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
@@ -273,6 +275,14 @@ export function PkwtAutoForm() {
                 {result.kopNote}
               </p>
             )}
+            {result.unfilled?.length > 0 && (
+              <div className="mt-3">
+                <UnfilledMarksWarning
+                  marks={result.unfilled}
+                  docUrl={result.docUrl}
+                />
+              </div>
+            )}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <a href={result.docUrl} target="_blank" rel="noreferrer">
@@ -514,58 +524,11 @@ export function PkwtAutoForm() {
           )}
 
           {emp && (
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-              <div className="rounded-md border border-border bg-surface-2 p-4">
-                <h3 className="mb-2 text-[13px] font-semibold text-text-1">
-                  Personal (otomatis)
-                </h3>
-                <dl className="space-y-1.5 text-sm">
-                  <div><dt className="text-xs text-text-2">Nama</dt><dd className="font-semibold text-text-1">{emp.nama_asli}</dd></div>
-                  <div><dt className="text-xs text-text-2">TTL</dt><dd className="font-medium text-text-1">{[emp.tempat_lahir, formatTanggalId(emp.tanggal_lahir)].filter(Boolean).join(", ") || "-"}</dd></div>
-                  <div><dt className="text-xs text-text-2">Alamat</dt><dd className="font-medium text-text-1">{emp.alamat_tinggal || "-"}</dd></div>
-                  <div><dt className="text-xs text-text-2">No. KTP</dt><dd className="font-medium font-mono text-text-1">{emp.no_ktp || "-"}</dd></div>
-                  <div><dt className="text-xs text-text-2">Posisi / Divisi</dt><dd className="font-medium text-text-1">{[emp.posisi, emp.divisi].filter(Boolean).join(" · ") || "-"}</dd></div>
-                </dl>
-              </div>
-              <div className="rounded-md border border-border bg-surface-2 p-4">
-                <h3 className="mb-2 text-[13px] font-semibold text-text-1">
-                  Payroll (otomatis{pay?.periode_bulan ? ` · ${pay.periode_bulan}` : ""})
-                </h3>
-                {pay ? (
-                  <dl className="space-y-1.5 text-sm">
-                    <div className="flex justify-between"><dt className="text-text-2">Gapok</dt><dd className="font-semibold tabular text-text-1">{formatRp(pay.gapok)}</dd></div>
-                    <div className="flex justify-between"><dt className="text-text-2">U. Makan</dt><dd className="font-medium tabular text-text-1">{formatRp(pay.u_makan)}/hari</dd></div>
-                    <div className="flex justify-between"><dt className="text-text-2">U. Transport</dt><dd className="font-medium tabular text-text-1">{formatRp(pay.u_transport)}/hari</dd></div>
-                    <div className="flex justify-between"><dt className="text-text-2">T. Jabatan</dt><dd className="font-medium tabular text-text-1">{formatRp(pay.t_jabatan)}</dd></div>
-                    <div className="flex justify-between"><dt className="text-text-2">T. Fungsional</dt><dd className="font-medium tabular text-text-1">{formatRp(pay.t_fungsional)}</dd></div>
-                    <div className="flex justify-between"><dt className="text-text-2">T. Kesehatan</dt><dd className="font-medium tabular text-text-1">{formatRp(pay.t_kesehatan)}</dd></div>
-                    <div className="flex justify-between"><dt className="text-text-2">T. Transport</dt><dd className="font-medium tabular text-text-1">{formatRp(pay.t_transport)}</dd></div>
-                  </dl>
-                ) : (
-                  <p className="text-sm text-amber-700">
-                    Payroll belum ada. Impor payroll dulu di halaman Data;
-                    komponen akan terisi Rp 0,-.
-                  </p>
-                )}
-              </div>
-              <div className="rounded-md border border-border bg-surface-2 p-4">
-                <h3 className="mb-2 text-[13px] font-semibold text-text-1">
-                  Perusahaan (otomatis)
-                </h3>
-                <dl className="space-y-1.5 text-sm">
-                  <div><dt className="text-xs text-text-2">Lini Bisnis</dt><dd className="font-semibold text-text-1">{emp.lini_bisnis || "-"}</dd></div>
-                  <div><dt className="text-xs text-text-2">Kode KOP</dt><dd className="font-semibold font-mono text-text-1">{company?.code || "-"}</dd></div>
-                  <div>
-                    <dt className="text-xs text-text-2">Status KOP</dt>
-                    <dd>
-                      <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${company?.hasKop ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
-                        {company?.hasKop ? "Ada KOP" : "Tanpa KOP (tambah manual)"}
-                      </span>
-                    </dd>
-                  </div>
-                </dl>
-              </div>
-            </div>
+            <EmployeeSnapshot
+              employee={emp}
+              payroll={pay}
+              company={company}
+            />
           )}
         </section>
 

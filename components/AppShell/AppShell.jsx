@@ -15,7 +15,7 @@ import { TopBar } from "@/components/AppShell/TopBar";
  * - force-close when resizing to >= lg (trapped dialog state must not leak
  *   into desktop mode)
  */
-export function AppShell({ user, children }) {
+export function AppShell({ user, sync, children }) {
   const pathname = usePathname();
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const panelRef = React.useRef(null);
@@ -102,6 +102,7 @@ export function AppShell({ user, children }) {
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar
           user={user}
+          sync={sync}
           onOpenDrawer={() => setDrawerOpen(true)}
           hamburgerRef={hamburgerRef}
         />

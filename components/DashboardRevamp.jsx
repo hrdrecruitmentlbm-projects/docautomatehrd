@@ -3,558 +3,270 @@
 import * as React from "react";
 import Link from "next/link";
 import {
-  CalendarDays,
   ExternalLink,
   FileText,
   Inbox,
-  Minus,
-  TrendingDown,
-  TrendingUp,
+  TriangleAlert,
+  CalendarClock,
+  UserPlus,
+  Users,
+  Wallet,
+  ScanSearch,
 } from "lucide-react";
-import { DashboardCharts, TYPE_COLORS } from "@/components/DashboardCharts";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-} from "@/components/ui/select";
+import { BusinessLineChart, MonthlyTrendChart } from "@/components/DashboardCharts";
+import { DocumentActions } from "@/components/documents/DocumentActions";
+import { ContractStateDot } from "@/components/documents/DocumentStatus";
+import { toIsoDate } from "@/lib/contract-lifecycle";
 
 /**
- * Dashboard revamp (reference-inspired layout):
- *   in-page header (h1 + subtitle | range & segment filters)
- *   -> 4 detached SOLID KPI cards with delta chips
- *   -> chart row: bucketed bar chart (granularity select) | donut + legend
- *   -> full-width recent-documents table (type filter).
+ * Dashboard — KPI yang bisa ditindaklanjuti.
  *
- * Time model: `now` is a prop captured during SSR — the client never reads
- * the wall clock during render (React compiler purity + hydration safety).
- * All windows are computed from that single reference.
+ * YANG BERUBAH, dan alasannya:
+ *   - "Rata² / Hari" dan "Pengguna Aktif" DIHAPUS. Keduanya dihitung dari
+ *     500 baris terakhir (lihat catatan di page.jsx) dan tidak prompting
+ *     keputusan apa pun. Digit yang tidak lengkap di atas kartu adalah
+ *     masalah integritas data, bukan cuma metric yang sia-sia.
+ *   - Diganti angka yang bisa ditindaklanjuti: kontrak yang mau habis,
+ *     karyawan tanpa payroll, karyawan tanpa kontrak, dan progres bulan ini.
+ *   - Donat komposisi jenis dokumen DIGANTI grafik batang per lini bisnis.
+ *   - Tiap kartu adalah link ke tempat kerjanya.
  *
- * Fact domains stay non-overlapping (R2/dedup):
- *   - "Total Dokumen" / "Rata² / Hari" / "Pengguna Aktif" -> selected range
- *   - "Dokumen Bulan Ini" -> calendar month, ignores range (anchor metric)
- *   - bar chart owns the time-bucket breakdown; donut owns type composition;
- *     the table owns row-level detail.
+ * `now` datang dari server sebagai prop supaya render deterministik.
  */
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-const RANGES = [
-  { value: "7", label: "7 Hari" },
-  { value: "30", label: "30 Hari" },
-  { value: "month", label: "Bulan Ini" },
-  { value: "lastmonth", label: "Bulan Lalu" },
-];
-
-const GRANULARITIES = [
-  { value: "day", label: "Harian" },
-  { value: "week", label: "Mingguan" },
-  { value: "month", label: "Bulanan" },
-];
-
-const TYPE_FILTERS = [
-  { value: "all", label: "Semua Jenis" },
-  { value: "pkwt", label: "PKWT" },
-  { value: "sk", label: "SK" },
-  { value: "memo", label: "Memo" },
-  { value: "sp", label: "SP" },
-];
-
-const ALL_TYPES = ["PKWT", "SK", "MEMO", "SP"];
-
-// Badge tiles bound to TYPE (agrees with donut cells + legend dots).
-const DOC_TYPE_TILES = {
+const TYPE_TILES = {
   pkwt: "bg-emerald-100 text-emerald-700",
   sk: "bg-amber-100 text-amber-700",
   memo: "bg-slate-100 text-slate-700",
   sp: "bg-red-100 text-red-700",
 };
-const tileFor = (type) =>
-  DOC_TYPE_TILES[(type || "").toLowerCase()] || "bg-surface-3 text-text-2";
 
-function startOfDay(time) {
-  const d = new Date(time);
-  d.setHours(0, 0, 0, 0);
-  return d.getTime();
-}
+const fmtInt = (n) => Number(n || 0).toLocaleString("id-ID");
 
-/** Selected window: {from, to, days, label}. Pure — caller supplies now. */
-function rangeBounds(range, now) {
-  const d = new Date(now);
-  if (range === "7" || range === "30") {
-    const days = Number(range);
-    return {
-      from: startOfDay(now) - (days - 1) * DAY_MS,
-      to: now,
-      days,
-      label: `${days} hari terakhir`,
-    };
-  }
-  if (range === "month") {
-    const from = new Date(d.getFullYear(), d.getMonth(), 1).getTime();
-    return {
-      from,
-      to: now,
-      days: Math.max(1, Math.round((now - from + DAY_MS) / DAY_MS)),
-      label: "Bulan ini",
-    };
-  }
-  // lastmonth: full previous calendar month.
-  const from = new Date(d.getFullYear(), d.getMonth() - 1, 1).getTime();
-  const to = new Date(d.getFullYear(), d.getMonth(), 1).getTime() - 1;
-  return {
-    from,
-    to,
-    days: Math.max(1, Math.round((to - from + DAY_MS) / DAY_MS)),
-    label: "Bulan lalu",
+const fmtDate = (iso) =>
+  iso
+    ? new Date(iso).toLocaleDateString("id-ID", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      })
+    : "-";
+
+function KpiCard({ label, value, context, href, icon: Icon, tone = "brand" }) {
+  const tones = {
+    brand: "bg-kpi-emerald",
+    gold: "bg-kpi-gold",
+    graphite: "bg-kpi-graphite",
+    signal: "bg-kpi-signal",
   };
-}
-
-/** Immediately-preceding comparable window (same length / same elapsed). */
-function prevBounds(range, now, cur) {
-  const d = new Date(now);
-  if (range === "7" || range === "30") {
-    return { from: cur.from - cur.days * DAY_MS, to: cur.from - 1 };
-  }
-  if (range === "month") {
-    // Month-to-date vs same elapsed time last month (apples to apples).
-    const pmFrom = new Date(d.getFullYear(), d.getMonth() - 1, 1).getTime();
-    const pmEnd = new Date(d.getFullYear(), d.getMonth(), 1).getTime() - 1;
-    return { from: pmFrom, to: Math.min(pmFrom + (cur.to - cur.from), pmEnd) };
-  }
-  const from = new Date(d.getFullYear(), d.getMonth() - 2, 1).getTime();
-  const to = new Date(d.getFullYear(), d.getMonth() - 1, 1).getTime() - 1;
-  return { from, to };
-}
-
-function countBetween(logs, from, to) {
-  let n = 0;
-  for (const log of logs) {
-    const t = new Date(log.created_at).getTime();
-    if (!Number.isNaN(t) && t >= from && t <= to) n++;
-  }
-  return n;
-}
-
-function usersBetween(logs, from, to) {
-  const set = new Set();
-  for (const log of logs) {
-    const t = new Date(log.created_at).getTime();
-    if (!Number.isNaN(t) && t >= from && t <= to && log.user_email) {
-      set.add(log.user_email);
-    }
-  }
-  return set.size;
-}
-
-/** Percentage delta vs previous window; guards prev=0. */
-function pctDelta(cur, prev) {
-  if (prev === 0) {
-    return cur > 0
-      ? { text: "Baru", dir: 1 }
-      : { text: "0%", dir: 0 };
-  }
-  const pct = Math.round(((cur - prev) / prev) * 100);
-  return {
-    text: `${pct > 0 ? "+" : ""}${pct}%`,
-    dir: pct > 0 ? 1 : pct < 0 ? -1 : 0,
-  };
-}
-
-const fmtInt = (n) => n.toLocaleString("id-ID");
-const fmtDec = (n) =>
-  n.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-const fmtDay = (t) =>
-  new Date(t).toLocaleDateString("id-ID", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-
-function DeltaChip({ delta, context }) {
-  const Icon = delta.dir > 0 ? TrendingUp : delta.dir < 0 ? TrendingDown : Minus;
-  return (
-    <p className="mt-auto flex flex-wrap items-center gap-1.5 pt-4 text-xs font-medium text-white">
-      <Icon className="size-3.5 shrink-0" aria-hidden="true" />
-      <span>{delta.text}</span>
-      <span className="font-normal">{context}</span>
-    </p>
-  );
-}
-
-function KpiCard({ label, value, delta, context, surface }) {
-  return (
-    <article
-      className={`flex min-h-[132px] flex-col rounded-lg p-5 ${surface}`}
-    >
-      <p className="text-sm font-medium text-white">{label}</p>
-      <p className="mt-3 text-3xl font-semibold leading-none tabular text-white">
+  const body = (
+    <>
+      <span className="flex items-center gap-1.5 text-sm font-medium text-white">
+        <Icon className="size-4 shrink-0 opacity-90" aria-hidden="true" />
+        {label}
+      </span>
+      <span className="mt-3 block text-3xl font-semibold leading-none tabular text-white">
         {value}
-      </p>
-      <DeltaChip delta={delta} context={context} />
-    </article>
+      </span>
+      <span className="mt-auto block pt-4 text-xs font-normal text-white/90">
+        {context}
+      </span>
+    </>
+  );
+
+  return (
+    <Link
+      href={href}
+      className={`flex min-h-[132px] flex-col rounded-lg p-5 transition-transform hover:brightness-110 active:translate-y-px ${tones[tone]}`}
+    >
+      {body}
+    </Link>
   );
 }
 
-export function DashboardRevamp({ logs, recentCap, now }) {
-  // Stable reference: `logs` only changes on navigation, but `logs || []`
-  // would otherwise be a fresh array identity each render.
-  const allLogs = React.useMemo(() => logs || [], [logs]);
-  const [range, setRange] = React.useState("30");
-  const [granularity, setGranularity] = React.useState("day");
-  const [segment, setSegment] = React.useState("all");
-  const [typeFilter, setTypeFilter] = React.useState("all");
+export function DashboardRevamp({ now, kpis, trend, byLine, recent, truncated }) {
+  const [selectedLine, setSelectedLine] = React.useState(null);
 
-  // Segment options come from data (lini_bisnis exists on PKWT-era rows only).
-  const segments = React.useMemo(() => {
-    const set = new Set();
-    for (const log of allLogs) {
-      const v = (log.lini_bisnis || "").trim().toUpperCase();
-      if (v) set.add(v);
-    }
-    return [...set].sort();
-  }, [allLogs]);
-
-  const inSegment = (log, seg) =>
-    seg === "all" || (log.lini_bisnis || "").trim().toUpperCase() === seg;
-
-  const segLogs = allLogs.filter((l) => inSegment(l, segment));
-
-  const bounds = rangeBounds(range, now);
-  const prev = prevBounds(range, now, bounds);
-  const rangeLogs = segLogs.filter((l) => {
-    const t = new Date(l.created_at).getTime();
-    return !Number.isNaN(t) && t >= bounds.from && t <= bounds.to;
-  });
-
-  // KPI math (domains documented at top of file).
-  const curCount = rangeLogs.length;
-  const prevCount = countBetween(segLogs, prev.from, prev.to);
-  const curAvg = curCount / bounds.days;
-  const prevAvg = prevCount / bounds.days;
-  const curUsers = usersBetween(segLogs, bounds.from, bounds.to);
-  const prevUsers = usersBetween(segLogs, prev.from, prev.to);
-
-  const d = new Date(now);
-  const monthFrom = new Date(d.getFullYear(), d.getMonth(), 1).getTime();
-  const pm = prevBounds("month", now, { from: monthFrom, to: now });
-  const monthCount = countBetween(segLogs, monthFrom, now);
-  const prevMonthCount = countBetween(segLogs, pm.from, pm.to);
-
-  const kpis = [
-    {
-      label: "Total Dokumen",
-      value: fmtInt(curCount),
-      delta: pctDelta(curCount, prevCount),
-      context: "vs periode sebelumnya",
-      surface: "bg-kpi-emerald",
-    },
-    {
-      label: "Dokumen Bulan Ini",
-      value: fmtInt(monthCount),
-      delta: pctDelta(monthCount, prevMonthCount),
-      context: "vs bulan lalu",
-      surface: "bg-kpi-gold",
-    },
-    {
-      label: "Rata² / Hari",
-      value: fmtDec(curAvg),
-      delta: pctDelta(curAvg, prevAvg),
-      context: "vs periode sebelumnya",
-      surface: "bg-kpi-graphite",
-    },
-    {
-      label: "Pengguna Aktif",
-      value: fmtInt(curUsers),
-      delta: pctDelta(curUsers, prevUsers),
-      context: "vs periode sebelumnya",
-      surface: "bg-kpi-signal",
-    },
-  ];
-
-  const periodLabel = `${fmtDay(bounds.from)} – ${fmtDay(bounds.to)}`;
-
-  const tableLogs = rangeLogs
-    .filter(
-      (l) =>
-        typeFilter === "all" ||
-        (l.document_type || "").toLowerCase() === typeFilter
-    )
-    .slice(0, 10);
-
-  const resetFilters = () => {
-    setRange("30");
-    setSegment("all");
-    setTypeFilter("all");
-  };
-
-  const typeCounts = ALL_TYPES.map((name) => ({
-    name,
-    value: rangeLogs.filter(
-      (l) => (l.document_type || "").toUpperCase() === name
-    ).length,
-  }));
-  const compositionTotal = rangeLogs.length;
+  const visibleRecent = React.useMemo(() => {
+    if (!selectedLine) return recent || [];
+    return (recent || []).filter(
+      (r) => (r.lini_bisnis || "Tanpa lini") === selectedLine
+    );
+  }, [recent, selectedLine]);
 
   return (
     <div className="space-y-5">
-      {/* In-page header: page owns the route's single <h1> (headerMode=page) */}
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      {/* headerMode: "page" -> halaman ini memegang satu-satunya <h1>. */}
+      <header className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold leading-7 tracking-[-0.01em] text-text-1">
             Dashboard
           </h1>
           <p className="mt-1 text-sm text-text-2">
-            Berikut ringkasan dokumen dan aktivitas Anda.
+            Yang perlu dikerjakan, bukan sekadar angka.
           </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Select value={range} onValueChange={setRange}>
-            <SelectTrigger className="h-9 gap-2" aria-label="Rentang waktu">
-              <CalendarDays className="size-4 text-text-2" aria-hidden="true" />
-              <span className="text-sm text-text-1">
-                {RANGES.find((r) => r.value === range)?.label}
-              </span>
-            </SelectTrigger>
-            <SelectContent>
-              {RANGES.map((r) => (
-                <SelectItem key={r.value} value={r.value}>
-                  {r.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          {segments.length > 0 && (
-            <Select value={segment} onValueChange={setSegment}>
-              <SelectTrigger className="h-9" aria-label="Segment lini bisnis">
-                <span className="text-sm text-text-1">
-                  {segment === "all" ? "Semua Segment" : segment}
-                </span>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Semua Segment</SelectItem>
-                {segments.map((s) => (
-                  <SelectItem key={s} value={s}>
-                    {s}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
         </div>
       </header>
 
-      {/* KPI band: 4 detached SOLID cards (doc-palette mapping, white ink) */}
-      <section aria-label="Indikator utama" className="space-y-2">
+      {/* KPI band — semua angka exact count dari server, tiap kartu navigating. */}
+      <section aria-label="Yang perlu ditangani" className="space-y-2">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {kpis.map((kpi) => (
-            <KpiCard key={kpi.label} {...kpi} />
-          ))}
+          <KpiCard
+            label="Segera Berakhir"
+            value={fmtInt(kpis.expiring)}
+            context="kontrak habis dalam 30 hari"
+            href="/kontrak"
+            icon={CalendarClock}
+            tone={kpis.expiring > 0 ? "signal" : "brand"}
+          />
+          <KpiCard
+            label="Belum Ada Kontrak"
+            value={fmtInt(kpis.noContract)}
+            context={`dari ${fmtInt(kpis.employees)} karyawan di master`}
+            href="/kontrak?state=belum"
+            icon={UserPlus}
+            tone={kpis.noContract > 0 ? "gold" : "brand"}
+          />
+          <KpiCard
+            label="Payroll Belum Ada"
+            value={fmtInt(kpis.missingPayroll)}
+            context="kontrak mereka akan gagal dibuat"
+            href="/data"
+            icon={Wallet}
+            tone={kpis.missingPayroll > 0 ? "signal" : "brand"}
+          />
+          <KpiCard
+            label="Dokumen Bulan Ini"
+            value={fmtInt(kpis.monthTotal)}
+            context={`${fmtInt(kpis.monthMine)} dibuat oleh Anda`}
+            href="/history"
+            icon={FileText}
+            tone="graphite"
+          />
         </div>
-        {/* Windowed counts must never read as exact totals */}
-        <p className="text-right text-xs tabular text-text-2">
-          Periode {periodLabel} · Berdasarkan{" "}
-          {fmtInt(recentCap)} dokumen terbaru
-        </p>
+        {truncated && (
+          <p className="text-right text-xs text-text-2">
+            Dihitung dari 5.000 log terbaru. Naikkan KEY_CAP bila perlu angka
+            pastwaan untuk seluruh riwayat.
+          </p>
+        )}
       </section>
 
-      {/* Chart row: bar (wider) | donut + legend + footer action */}
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
+      {/* Charts: tren bulanan | per lini bisnis */}
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <section
-          aria-labelledby="activity-heading"
+          aria-labelledby="tren-heading"
+          className="rounded-lg border border-border bg-surface-1 p-5"
+        >
+          <h2 id="tren-heading" className="mb-3 text-[15px] font-semibold text-text-1">
+            Dokumen per Bulan
+          </h2>
+          <MonthlyTrendChart data={trend} />
+        </section>
+
+        <section
+          aria-labelledby="lini-heading"
           className="rounded-lg border border-border bg-surface-1 p-5"
         >
           <div className="mb-3 flex items-center justify-between gap-3">
-            <h2
-              id="activity-heading"
-              className="text-[15px] font-semibold text-text-1"
-            >
-              Aktivitas Dokumen
+            <h2 id="lini-heading" className="text-[15px] font-semibold text-text-1">
+              Dokumen per Lini Bisnis
             </h2>
-            <Select value={granularity} onValueChange={setGranularity}>
-              <SelectTrigger
-                className="h-8"
-                aria-label="Granularity grafik aktivitas"
+            {selectedLine && (
+              <button
+                type="button"
+                onClick={() => setSelectedLine(null)}
+                className="rounded-md border border-border px-2 py-1 text-xs tabular text-text-2 transition-colors hover:bg-surface-2"
               >
-                <span className="text-sm text-text-1">
-                  {GRANULARITIES.find((g) => g.value === granularity)?.label}
-                </span>
-              </SelectTrigger>
-              <SelectContent>
-                {GRANULARITIES.map((g) => (
-                  <SelectItem key={g.value} value={g.value}>
-                    {g.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                {selectedLine} ×
+              </button>
+            )}
           </div>
-          <DashboardCharts
-            logs={rangeLogs}
-            chartType="bar"
-            granularity={granularity}
-            bounds={{ from: bounds.from, to: bounds.to }}
-            fill="var(--brand-600)"
+          <BusinessLineChart
+            data={byLine}
+            selected={selectedLine}
+            onSelect={(name) => setSelectedLine((cur) => (cur === name ? null : name))}
           />
-          <p className="mt-2 text-right text-xs tabular text-text-2">
-            Total {fmtInt(curCount)} dokumen pada periode ini
+          <p className="mt-2 text-right text-xs text-text-2">
+            Klik batang untuk menyaring tabel di bawah
           </p>
-        </section>
-
-        <section
-          aria-labelledby="composition-heading"
-          className="flex flex-col rounded-lg border border-border bg-surface-1 p-5"
-        >
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <h2
-              id="composition-heading"
-              className="text-[15px] font-semibold text-text-1"
-            >
-              Komposisi Dokumen
-            </h2>
-            <span className="rounded-md border border-border px-2 py-1 text-xs tabular text-text-2">
-              {periodLabel}
-            </span>
-          </div>
-
-          <div className="flex flex-1 flex-col items-center gap-4 sm:flex-row">
-            <div className="w-full sm:w-[46%]">
-              <DashboardCharts logs={rangeLogs} chartType="pie" />
-            </div>
-            {/* Legend: name row + value row, colors bound to TYPE */}
-            <ul className="grid w-full flex-1 grid-cols-2 gap-x-4 gap-y-4">
-              {typeCounts.map((t) => (
-                <li key={t.name}>
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="size-2.5 shrink-0 rounded-sm"
-                      style={{ background: TYPE_COLORS[t.name] }}
-                      aria-hidden="true"
-                    />
-                    <span className="text-sm text-text-2">{t.name}</span>
-                  </div>
-                  <p className="mt-1 pl-[18px] text-lg font-semibold tabular text-text-1">
-                    {fmtInt(t.value)}
-                    {compositionTotal > 0 && (
-                      <span className="ml-1.5 text-xs font-normal text-text-2">
-                        {Math.round((t.value / compositionTotal) * 100)}%
-                      </span>
-                    )}
-                  </p>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <Link
-            href="/history"
-            className="mt-4 flex h-9 w-full items-center justify-center rounded-md border border-border text-sm font-medium text-text-1 transition-colors hover:bg-surface-2"
-          >
-            Lihat Detail
-          </Link>
         </section>
       </div>
 
-      {/* Recent documents: full width, type filter, ID-like number column */}
+      {/* Recent documents */}
       <section
-        aria-labelledby="recent-docs-heading"
+        aria-labelledby="recent-heading"
         className="overflow-hidden rounded-lg border border-border bg-surface-1"
       >
         <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
-          <h2
-            id="recent-docs-heading"
-            className="text-[15px] font-semibold text-text-1"
-          >
+          <h2 id="recent-heading" className="text-[15px] font-semibold text-text-1">
             Dokumen Terbaru
+            {selectedLine && (
+              <span className="ml-2 text-xs font-normal text-text-2">
+                difilter: {selectedLine}
+              </span>
+            )}
           </h2>
-          <div className="flex items-center gap-3">
-            <Link
-              href="/history"
-              className="text-sm font-medium text-primary hover:underline"
-            >
-              Lihat Semua
-            </Link>
-            <Select value={typeFilter} onValueChange={setTypeFilter}>
-              <SelectTrigger className="h-8" aria-label="Filter jenis dokumen">
-                <span className="text-sm text-text-1">
-                  {TYPE_FILTERS.find((t) => t.value === typeFilter)?.label}
-                </span>
-              </SelectTrigger>
-              <SelectContent>
-                {TYPE_FILTERS.map((t) => (
-                  <SelectItem key={t.value} value={t.value}>
-                    {t.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          <Link href="/input-dokumen" className="text-sm font-medium text-primary hover:underline">
+            Lihat semua
+          </Link>
         </div>
 
-        {allLogs.length === 0 ? (
-          /* Teaching empty state, not "nothing here" */
+        {(recent || []).length === 0 ? (
           <div className="flex flex-col items-center justify-center px-6 py-14 text-center">
             <div className="mb-4 flex size-12 items-center justify-center rounded-full bg-surface-2">
               <Inbox className="size-6 text-text-2" aria-hidden="true" />
             </div>
-            <h3 className="mb-1 text-sm font-semibold text-text-1">
-              Belum ada dokumen
-            </h3>
-            <p className="mb-5 text-sm text-text-2">
-              Buat dokumen pertama Anda untuk mulai melacak riwayat.
+            <h3 className="mb-1 text-sm font-semibold text-text-1">Belum ada dokumen</h3>
+            <p className="mb-5 max-w-sm text-sm text-text-2">
+              Sync master di halaman Data lalu buat kontrak pertama dari Register.
             </p>
             <Link
-              href="/input-dokumen"
-              className="inline-flex h-9 items-center gap-1.5 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 active:translate-y-px"
+              href="/kontrak"
+              className="inline-flex h-9 items-center gap-1.5 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
             >
-              Buat dokumen pertama
+              <Users className="mr-1.5 size-4" aria-hidden="true" />
+              Buka Register Kontrak
             </Link>
           </div>
-        ) : tableLogs.length === 0 ? (
-          /* Filters matched nothing — offer the way out */
+        ) : visibleRecent.length === 0 ? (
           <div className="flex flex-col items-center justify-center px-6 py-12 text-center">
             <p className="text-sm text-text-2">
-              Tidak ada dokumen pada periode atau filter ini.
+              Tidak ada dokumen terbaru di lini bisnis ini.
             </p>
             <button
               type="button"
-              onClick={resetFilters}
-              className="mt-4 inline-flex h-9 items-center rounded-md border border-border px-4 text-sm font-medium text-text-1 transition-colors hover:bg-surface-2"
+              onClick={() => setSelectedLine(null)}
+              className="mt-3 inline-flex h-9 items-center rounded-md border border-border px-4 text-sm font-medium text-text-1 transition-colors hover:bg-surface-2"
             >
-              Reset filter
+              Hapus filter
             </button>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <caption className="sr-only">
-                Daftar dokumen terbaru (maksimal 10 baris) beserta nomor,
-                jenis, tanggal, dan pembuatnya pada filter yang dipilih.
+                {visibleRecent.length} dokumen terbaru beserta nama, nomor, jenis,
+                tanggal, dan status masanya.
               </caption>
               <thead>
-                <tr className="border-b border-border text-xs font-medium text-text-2">
+                <tr className="border-y border-border text-xs font-medium text-text-2">
                   <th scope="col" className="px-5 py-2.5 text-left">Nama</th>
-                  <th
-                    scope="col"
-                    className="hidden px-4 py-2.5 text-left lg:table-cell"
-                  >
+                  <th scope="col" className="hidden px-4 py-2.5 text-left lg:table-cell">
                     Nomor
                   </th>
                   <th scope="col" className="px-4 py-2.5 text-left">Jenis</th>
                   <th scope="col" className="px-4 py-2.5 text-left">Tanggal</th>
-                  <th
-                    scope="col"
-                    className="hidden px-4 py-2.5 text-left md:table-cell"
-                  >
-                    Pembuat
+                  <th scope="col" className="hidden px-4 py-2.5 text-left md:table-cell">
+                    Kontrak
                   </th>
                   <th scope="col" className="px-4 py-2.5 text-right">Aksi</th>
                 </tr>
               </thead>
               <tbody>
-                {tableLogs.map((log) => {
+                {visibleRecent.map((log) => {
                   const type = (log.document_type || "").toLowerCase();
+                  const tile = TYPE_TILES[type] || "bg-surface-3 text-text-2";
                   return (
                     <tr
                       key={log.id}
@@ -563,26 +275,26 @@ export function DashboardRevamp({ logs, recentCap, now }) {
                       <td className="px-5 py-2.5">
                         <div className="flex items-center gap-3">
                           <span
-                            className={`flex size-7 shrink-0 items-center justify-center rounded-md ${tileFor(type)}`}
+                            className={`flex size-7 shrink-0 items-center justify-center rounded-md ${tile}`}
                             aria-hidden="true"
                           >
                             <FileText className="size-4" />
                           </span>
                           <span className="min-w-0">
-                            <span className="block truncate font-medium text-text-1">
+                            <Link
+                              href={`/input-dokumen/${log.id}`}
+                              className="block truncate font-medium text-text-1 hover:text-primary hover:underline"
+                            >
                               {log.employee_name || "Dokumen"}
-                            </span>
-                            {/* Meta restacks below md where columns 2-4 hide */}
+                            </Link>
+                            {log.unfilled_marks?.length > 0 && (
+                              <span className="flex items-center gap-1 text-xs text-amber-700">
+                                <ScanSearch className="size-3 shrink-0" aria-hidden="true" />
+                                {log.unfilled_marks.length} penanda belum terisi
+                              </span>
+                            )}
                             <span className="block truncate text-xs text-text-2 md:hidden">
-                              {log.document_type?.toUpperCase()} ·{" "}
-                              {new Date(log.created_at).toLocaleDateString(
-                                "id-ID",
-                                {
-                                  day: "2-digit",
-                                  month: "short",
-                                  year: "numeric",
-                                }
-                              )}
+                              {log.document_type?.toUpperCase()} · {fmtDate(log.created_at)}
                             </span>
                           </span>
                         </div>
@@ -594,33 +306,32 @@ export function DashboardRevamp({ logs, recentCap, now }) {
                       </td>
                       <td className="px-4 py-2.5">
                         <span
-                          className={`inline-flex h-5 items-center rounded-full px-2 text-xs font-medium ${tileFor(type)}`}
+                          className={`inline-flex h-5 items-center rounded-full px-2 text-xs font-medium ${tile}`}
                         >
                           {log.document_type?.toUpperCase()}
                         </span>
                       </td>
                       <td className="px-4 py-2.5 tabular text-text-2">
-                        <time dateTime={log.created_at}>
-                          {new Date(log.created_at).toLocaleDateString("id-ID", {
-                            day: "2-digit",
-                            month: "short",
-                            year: "numeric",
-                          })}
-                        </time>
+                        <time dateTime={log.created_at}>{fmtDate(log.created_at)}</time>
                       </td>
-                      <td className="hidden max-w-[180px] truncate px-4 py-2.5 text-text-2 md:table-cell">
-                        {log.user_email}
+                      <td className="hidden px-4 py-2.5 md:table-cell">
+                        {type === "pkwt" ? (
+                          <ContractStateDot
+                            tanggalBerakhir={toIsoDate(log.tanggal_berakhir)}
+                            now={now}
+                          />
+                        ) : (
+                          <span className="text-xs text-text-2">-</span>
+                        )}
                       </td>
-                      <td className="px-4 py-2.5 text-right">
-                        <a
-                          href={log.google_doc_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="relative inline-flex size-9 items-center justify-center rounded-md text-text-2 transition-colors hover:bg-surface-2 hover:text-text-1 after:absolute after:-inset-1 after:content-['']"
-                          aria-label={`Buka ${log.employee_name || "dokumen"} di Google Docs`}
-                        >
-                          <ExternalLink className="size-4" aria-hidden="true" />
-                        </a>
+                      <td className="px-4 py-2.5">
+                        <DocumentActions
+                          id={log.id}
+                          docUrl={log.google_doc_url}
+                          documentType={type}
+                          tanggalMulai={log.tanggal_mulai}
+                          unfilled={log.unfilled_marks}
+                        />
                       </td>
                     </tr>
                   );
@@ -630,6 +341,20 @@ export function DashboardRevamp({ logs, recentCap, now }) {
           </div>
         )}
       </section>
+
+      {kpis.expired > 0 && (
+        <p className="flex items-start gap-2 rounded-md border border-border bg-surface-2 px-4 py-3 text-sm text-text-2">
+          <TriangleAlert className="mt-0.5 size-4 shrink-0 text-amber-600" aria-hidden="true" />
+          <span>
+            Ada <span className="font-semibold text-text-1">{fmtInt(kpis.expired)}</span>{" "}
+            kontrak yang sudah lewat masa berlakunya. Buka{" "}
+            <Link href="/kontrak?state=kedaluwarsa" className="font-medium text-primary hover:underline">
+              Register Kontrak
+            </Link>{" "}
+            untuk memperpanjang.
+          </span>
+        </p>
+      )}
     </div>
   );
 }

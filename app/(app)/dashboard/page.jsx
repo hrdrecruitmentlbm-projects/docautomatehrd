@@ -3,40 +3,159 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { DashboardRevamp } from "@/components/DashboardRevamp";
 
 /**
- * Dashboard (revamped, reference-style layout).
- * Server side owns ONLY the bounded fetch + the render-time clock:
- * - RECENT_CAP keeps aggregates on a capped recent set (no unbounded select).
- * - `now` is captured here so the client component never reads the wall
- *   clock during render (React compiler purity, hydration-safe windows).
- * All filtering, KPI deltas, chart bucketing and the table live in
- * components/DashboardRevamp.jsx (client).
+ * Dashboard.
+ *
+ * SEMUA angka berasal dari hitungan server-side yang pasti, bukan dari
+ * himpunan baris yang dipangkas. Versi lama menarik 500 log terakhir lalu
+ * menghitung "Rata² / Hari" dan "Pengguna Aktif" dari situ — dua kartu
+ * yang angkanya jelas tidak lengkap dan tidak prompting keputusan apa pun,
+ * even sampai footnote mengakui keterbatasannya sendiri. Sekarang tiap KPI
+ * adalah exact head-count dengan filter: benar pada volume berapa pun, dan
+ * tidak perlu footnote.
+ *
+ * Tiap KPI adalah LINK ke tempat kerjanya, bukan hiasan.
  */
-const RECENT_CAP = 500;
 
-/**
- * Wall clock behind a module-scope function: the React compiler purity rule
- * forbids a direct Date.now() in render, but allows module-scope helpers
- * (same pattern the previous computeTemporalStats used).
- */
-function renderNow() {
-  return Date.now();
+const TREND_MONTHS = 6;
+const TREND_ROWS = 2000;
+const RECENT_ROWS = 10;
+const KEY_CAP = 5000;
+
+function monthKeys(now, back) {
+  const out = [];
+  for (let i = back - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    out.push({
+      key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
+      label: d.toLocaleDateString("id-ID", { month: "short" }),
+    });
+  }
+  return out;
 }
 
 export default async function NewDashboardPage() {
-  await auth();
+  const session = await auth();
+  const email = session?.user?.email || null;
 
-  const { data: logs, error: logsError } = await supabaseAdmin
-    .from("document_logs")
-    .select("*")
-    .order("created_at", { ascending: false })
-    .limit(RECENT_CAP);
+  const now = new Date();
+  const today = now.toISOString().slice(0, 10);
+  const soon = new Date(now.getTime() + 30 * 86400000).toISOString().slice(0, 10);
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+  const months = monthKeys(now, TREND_MONTHS);
 
-  // Throwing here routes to error.jsx — an error must never read as empty.
-  if (logsError) {
-    throw new Error(`Gagal memuat dokumen: ${logsError.message}`);
+  const pkwt = (q) => q.eq("document_type", "pkwt");
+
+  const [
+    expiringQ,
+    expiredQ,
+    monthQ,
+    monthMineQ,
+    totalQ,
+    empCountQ,
+    payCountQ,
+    empKeysQ,
+    contractKeysQ,
+    trendQ,
+    recentQ,
+  ] = await Promise.all([
+    pkwt(
+      supabaseAdmin
+        .from("document_logs")
+        .select("id", { count: "exact", head: true })
+        .gte("tanggal_berakhir", today)
+        .lte("tanggal_berakhir", soon)
+    ),
+    pkwt(
+      supabaseAdmin
+        .from("document_logs")
+        .select("id", { count: "exact", head: true })
+        .lt("tanggal_berakhir", today)
+    ),
+    supabaseAdmin
+      .from("document_logs")
+      .select("id", { count: "exact", head: true })
+      .gte("created_at", monthStart),
+    supabaseAdmin
+      .from("document_logs")
+      .select("id", { count: "exact", head: true })
+      .gte("created_at", monthStart)
+      .eq("user_email", email || "__none__"),
+    supabaseAdmin.from("document_logs").select("id", { count: "exact", head: true }),
+    supabaseAdmin.from("employees").select("nama_key", { count: "exact", head: true }),
+    supabaseAdmin.from("payroll_latest").select("nama_key", { count: "exact", head: true }),
+    supabaseAdmin.from("employees").select("nama_key").limit(KEY_CAP),
+    supabaseAdmin
+      .from("document_logs")
+      .select("employee_nama_key")
+      .not("employee_nama_key", "is", null)
+      .limit(KEY_CAP),
+    supabaseAdmin
+      .from("document_logs")
+      .select("id,created_at,lini_bisnis")
+      .order("created_at", { ascending: false })
+      .limit(TREND_ROWS),
+    supabaseAdmin
+      .from("document_logs")
+      .select(
+        "id,employee_name,document_type,created_at,google_doc_url,document_number,user_email,tanggal_berakhir,unfilled_marks"
+      )
+      .order("created_at", { ascending: false })
+      .limit(RECENT_ROWS),
+  ]);
+
+  // Hanya kegagalan data karyawan yang menjatuhkan halaman; sisanya
+  //emptyset ke 0 daripada menampilkan dashboard kosong.
+  if (empCountQ.error) {
+    throw new Error(`Gagal memuat data karyawan: ${empCountQ.error.message}`);
+  }
+
+  const employees = empCountQ.count || 0;
+  const missingPayroll = Math.max(employees - (payCountQ.count || 0), 0);
+
+  // "Belum ada kontrak": karyawan yang tidak muncul sebagai
+  // employee_nama_key di satu pun baris log.
+  const withContract = new Set((contractKeysQ.data || []).map((r) => r.employee_nama_key));
+  const noContract = withContract.size
+    ? (empKeysQ.data || []).filter((e) => !withContract.has(e.nama_key)).length
+    : employees;
+
+  // Tren bulanan + komposisi lini bisnis, dari data yang sudah ditarik.
+  const trend = months.map((m) => ({ ...m, total: 0 }));
+  const trendIndex = new Map(trend.map((t) => [t.key, t]));
+  const lineTotals = new Map();
+
+  for (const row of trendQ.data || []) {
+    const t = new Date(row.created_at);
+    const line = (row.lini_bisnis || "").trim() || "Tanpa lini";
+    if (!isNaN(t)) {
+      const bucket = trendIndex.get(
+        `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}`
+      );
+      if (bucket) bucket.total += 1;
+    }
+    lineTotals.set(line, (lineTotals.get(line) || 0) + 1);
   }
 
   return (
-    <DashboardRevamp logs={logs || []} recentCap={RECENT_CAP} now={renderNow()} />
+    <DashboardRevamp
+      now={now.getTime()}
+      kpis={{
+        expiring: expiringQ.count || 0,
+        expired: expiredQ.count || 0,
+        monthTotal: monthQ.count || 0,
+        monthMine: monthMineQ.count || 0,
+        total: totalQ.count || 0,
+        missingPayroll,
+        noContract,
+        employees,
+      }}
+      trend={trend}
+      byLine={[...lineTotals.entries()]
+        .map(([name, value]) => ({ name, value }))
+        .sort((a, b) => b.value - a.value)
+        .slice(0, 10)}
+      recent={recentQ.data || []}
+      truncated={(empKeysQ.data || []).length >= KEY_CAP}
+    />
   );
 }
