@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Database, TriangleAlert, CircleCheck, ChevronDown } from "lucide-react";
+import { Database, TriangleAlert, CircleCheck, ChevronDown, CircleX } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,14 +19,25 @@ import { cn } from "@/lib/utils";
  * ada, ia jadi hiasan yang diabaikan; kalau ia muncul hanya saat ada
  * masalah, kemunculannya berarti sesuatu. Di mobile cukup berupa titik
  * berwarna — popover yang sama dibuka lewat ketukan.
+ *
+ * Label ikut menyebut SUMBER masalahnya. Versi sebelumnya memakai satu
+ * level "terburuk" untuk master dan payroll, sehingga masalah payroll
+ * muncul sebagai "Data belum ada" padahal master berisi 112 karyawan.
+ * Dua masalah, dua tindakan berbeda, dua label berbeda.
  */
 
 const LEVEL_STYLE = {
+  gagal: {
+    trigger: "bg-red-50 text-red-800 border-red-200",
+    dot: "bg-red-600",
+    icon: CircleX,
+    label: "Gagal memuat",
+  },
   kosong: {
     trigger: "bg-red-50 text-red-800 border-red-200",
     dot: "bg-red-600",
     icon: TriangleAlert,
-    label: "Data belum ada",
+    label: "Data kosong",
   },
   basi: {
     trigger: "bg-red-50 text-red-800 border-red-200",
@@ -54,6 +65,10 @@ function Row({ label, value, sub, tone = "" }) {
   );
 }
 
+function levelTone(level) {
+  return level === "ok" ? "" : level === "gagal" ? "text-red-700" : "text-amber-800";
+}
+
 export function SyncStatus({ sync }) {
   if (!sync) return null;
 
@@ -71,7 +86,6 @@ export function SyncStatus({ sync }) {
 
   const style = LEVEL_STYLE[sync.level] || LEVEL_STYLE.perlu;
   const Icon = style.icon;
-  const payrollNeedsAttention = sync.payroll.level !== "ok";
 
   return (
     <DropdownMenu>
@@ -97,20 +111,38 @@ export function SyncStatus({ sync }) {
         <div className="px-2 pb-1">
           <Row
             label="Data master"
-            value={`${sync.master.count.toLocaleString("id-ID")} karyawan`}
-            sub={sync.master.lastSyncAt ? `sinkron ${relativeTime(sync.master.lastSyncAt)}` : "belum pernah sinkron"}
-            tone={sync.master.level === "ok" ? "" : "text-amber-800"}
+            value={
+              sync.masterLevel === "gagal"
+                ? "Gagal dimuat"
+                : `${sync.master.count.toLocaleString("id-ID")} karyawan`
+            }
+            sub={
+              sync.masterLevel === "gagal"
+                ? sync.master.error
+                : sync.master.lastSyncAt
+                  ? `sinkron ${relativeTime(sync.master.lastSyncAt)}`
+                  : "waktu sinkron tidak tercatat"
+            }
+            tone={levelTone(sync.masterLevel)}
           />
           <div className="border-t border-border" />
           <Row
             label="Payroll"
-            value={sync.payroll.period ? `periode ${sync.payroll.period}` : "belum ada"}
-            sub={
-              sync.payroll.lastSyncAt
-                ? `sinkron ${relativeTime(sync.payroll.lastSyncAt)}`
-                : "belum pernah sinkron"
+            value={
+              sync.payrollLevel === "gagal"
+                ? "Gagal dimuat"
+                : sync.payroll.period
+                  ? `periode ${sync.payroll.period}`
+                  : `${sync.payroll.count.toLocaleString("id-ID")} karyawan`
             }
-            tone={payrollNeedsAttention ? "text-amber-800" : ""}
+            sub={
+              sync.payrollLevel === "gagal"
+                ? sync.payroll.error
+                : sync.payroll.lastSyncAt
+                  ? `sinkron ${relativeTime(sync.payroll.lastSyncAt)}`
+                  : "belum pernah sinkron"
+            }
+            tone={levelTone(sync.payrollLevel)}
           />
         </div>
 
