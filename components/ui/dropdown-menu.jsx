@@ -62,15 +62,35 @@ function DropdownMenuLabel({
   inset,
   ...props
 }) {
+  // Group-label DIAMANKAN sendiri di dalam <MenuPrimitive.Group>.
+  //
+  // Base UI: MenuGroupLabel memanggil useMenuGroupRootContext(), yang
+  // melempar error kalau tidak ada <Menu.Group> di atasnya:
+  //
+  //   "MenuGroupRootContext is missing. Menu group parts must be
+  //    used within <Menu.Group>."
+  //
+  // Karena itu setiap menu yang memakai DropdownMenuLabel tanpa
+  // <DropdownMenuGroup> melempar error SAAT DIBUKA — bukan saat render
+  // server, jadi lolos dari error boundary dan menghasilkan layar hitam
+  // ("This page couldn't load"). Tiga menu yang begitu: menu avatar,
+  // pil status sinkron, dan menu "..." pada baris dokumen.
+  //
+  // Group hanya merender <div role="group"> plus menyediakan context, jadi
+  // membungkusnya di sini tidak mengubah tampilan — dan membuat pemanggilan
+  // ini mustahil salah lagi di tempat mana pun.
   return (
-    <MenuPrimitive.GroupLabel
-      data-slot="dropdown-menu-label"
-      data-inset={inset}
-      className={cn(
-        "px-1.5 py-1 text-xs font-medium text-muted-foreground data-inset:pl-7",
-        className
-      )}
-      {...props} />
+    <MenuPrimitive.Group>
+      <MenuPrimitive.GroupLabel
+        data-slot="dropdown-menu-label"
+        data-inset={inset}
+        className={cn(
+          "px-1.5 py-1 text-xs font-medium text-muted-foreground data-inset:pl-7",
+          className
+        )}
+        {...props}
+      />
+    </MenuPrimitive.Group>
   );
 }
 

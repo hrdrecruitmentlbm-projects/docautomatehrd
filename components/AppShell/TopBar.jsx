@@ -173,6 +173,9 @@ export function TopBar({ user, sync, onOpenDrawer, hamburgerRef }) {
         </DropdownMenuTrigger>
 
         <DropdownMenuContent align="end" className="w-56 shadow-popover">
+          {/* Nama + email adalah header visual, bukan group label. Tetap
+              aman karena DropdownMenuLabel sudah menyediakan konteks
+              group-nya sendiri. */}
           <DropdownMenuLabel className="truncate text-text-1">
             {user?.name || "User"}
           </DropdownMenuLabel>
@@ -183,7 +186,7 @@ export function TopBar({ user, sync, onOpenDrawer, hamburgerRef }) {
           {/* base-ui Menu.Item uses onClick (not Radix onSelect) */}
           <DropdownMenuItem onClick={() => router.push("/settings")}>
             <Settings className="size-4" />
-            Settings
+            Pengaturan
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           {/* Destructive action, spatially separated (nav-separation rule) */}
@@ -192,7 +195,7 @@ export function TopBar({ user, sync, onOpenDrawer, hamburgerRef }) {
             onClick={() => signOut({ callbackUrl: "/login" })}
           >
             <LogOut className="size-4" />
-            Log Out
+            Keluar
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
