@@ -4,6 +4,7 @@ import { getDocumentConfig } from "@/lib/document-configs";
 import { copyTemplate, replacePlaceholders, buildDocUrl } from "@/lib/google";
 import { generateDocumentNumber } from "@/lib/auto-numbering";
 import { generatePkwt } from "@/lib/generate-pkwt";
+import { generatePaklaring } from "@/lib/generate-paklaring";
 
 // WAJIB: rantai ini memanggil Google Docs API beberapa kali — copy template,
 // batchUpdate penanda, insert gambar KOP, docs.get untuk pemeriksaan hasil,
@@ -46,9 +47,14 @@ export async function POST(req) {
       return Response.json({ error: "Failed to load user settings" }, { status: 500 });
     }
 
-    // ---- Cabang PKWT OTOMATIS: cari nama -> data + payroll terisi sendiri ----
+    // ---- Cabang otomatis: cari nama -> data terisi sendiri ----
+    // PKWT butuh payroll, Paklaring tidak. Keduanya punya generator sendiri;
+    // yang di sini hanya memilih jalurnya.
     if (documentType === 'pkwt' && employeeKey) {
-      return handlePkwtAuto({ session, settings, employeeKey, manual });
+      return handleAutoDoc(handlePkwtAuto, { session, settings, employeeKey, manual });
+    }
+    if (documentType === 'paklaring' && employeeKey) {
+      return handleAutoDoc(handlePaklaringAuto, { session, settings, employeeKey, manual });
     }
 
     // ---- Alur lama (SK/Memo/SP + fallback PKWT manual) ----
@@ -130,10 +136,30 @@ export async function POST(req) {
  * yang bisa melenceng diam-diam.
  */
 async function handlePkwtAuto({ session, settings, employeeKey, manual = {} }) {
-  const result = await generatePkwt({ session, settings, employeeKey, manual });
-  if (!result.ok) {
-    return Response.json({ error: result.error }, { status: result.status });
-  }
-  const { ok, ...payload } = result;
-  return Response.json(payload);
+  return handleAutoDoc(generatePkwt, { session, settings, employeeKey, manual });
+}
+
+/**
+ * Paklaring otomatis. Logikanya hidup di lib/generate-paklaring.js.
+ */
+async function handlePaklaringAuto({ session, settings, employeeKey, manual = {} }) {
+  return handleAutoDoc(generatePaklaring, { session, settings, employeeKey, manual });
+}
+
+/**
+ * Bentuk respons generik untuk generator otomatis.
+ *
+ * Semua generator otomatis mengembalikan { ok:false, status, error } atau
+ * { ok:true, ...payload } dan tidak pernah melempar error. Fungsi ini
+ * memetakan bentuk itu ke Response, supaya setiap route tidak menulis ulang
+ * pemetaannya.
+ */
+function handleAutoDoc(generate, args) {
+  return generate(args).then((result) => {
+    if (!result.ok) {
+      return Response.json({ error: result.error }, { status: result.status });
+    }
+    const { ok, ...payload } = result;
+    return Response.json(payload);
+  });
 }

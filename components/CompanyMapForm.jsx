@@ -101,7 +101,8 @@ export function CompanyMapForm() {
                     <TableHead>Kode KOP</TableHead>
                     <TableHead>Nama PT (legal)</TableHead>
                     <TableHead>Template ID (PKWT)</TableHead>
-                    <TableHead>Folder ID (hasil)</TableHead>
+                    <TableHead>Template ID (Paklaring)</TableHead>
+                    <TableHead>Folder ID arsip</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -123,6 +124,9 @@ export function CompanyMapForm() {
                       </TableCell>
                       <TableCell>
                         <Input value={r.pkwt_template_id || ""} onChange={(e) => set(i, "pkwt_template_id", e.target.value)} placeholder="ID Google Doc" className="h-10 min-w-[180px] font-mono text-xs" />
+                      </TableCell>
+                      <TableCell>
+                        <Input value={r.paklaring_template_id || ""} onChange={(e) => set(i, "paklaring_template_id", e.target.value)} placeholder="ID Google Doc" className="h-10 min-w-[180px] font-mono text-xs" />
                       </TableCell>
                       <TableCell>
                         <Input value={r.pkwt_folder_id || ""} onChange={(e) => set(i, "pkwt_folder_id", e.target.value)} placeholder="ID Folder Drive" className="h-10 min-w-[180px] font-mono text-xs" />

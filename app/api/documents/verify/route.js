@@ -26,7 +26,11 @@ export async function POST(req) {
 
     const { data: log } = await supabaseAdmin
       .from("document_logs")
-      .select("id,google_doc_id")
+      // document_type WAJIB: himpunan penanda yang dianggap "terisi" berbeda
+      // per jenis (lihat lib/template-scan.js). Tanpa kolom ini, memeriksa
+      // surat Paklaring akan memakai key PKWT dan melaporkan hampir semua
+      // penandanya sebagai belum terisi.
+      .select("id,google_doc_id,document_type")
       .eq("id", id)
       .maybeSingle();
 
@@ -34,7 +38,7 @@ export async function POST(req) {
       return Response.json({ error: "Dokumen tidak ditemukan" }, { status: 404 });
     }
 
-    const result = await verifyDocument(session.accessToken, log.google_doc_id);
+    const result = await verifyDocument(session.accessToken, log.google_doc_id, log.document_type);
 
     if (result.ok) {
       const patch = {

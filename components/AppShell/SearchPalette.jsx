@@ -14,13 +14,7 @@ import {
   CommandItem,
 } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
-
-const TYPE_COLORS = {
-  pkwt: "bg-emerald-100 text-emerald-700",
-  sk: "bg-amber-100 text-amber-700",
-  memo: "bg-slate-100 text-slate-700",
-  sp: "bg-red-100 text-red-700",
-};
+import { docTypeMeta } from "@/lib/doc-types";
 
 const RECENT_KEY = "docauto-search-recent";
 
@@ -237,7 +231,7 @@ export function SearchPalette({ open, onOpenChange }) {
                       <span
                         className={cn(
                           "flex size-6 shrink-0 items-center justify-center rounded-md",
-                          TYPE_COLORS[type] || "bg-surface-3 text-text-2"
+                          docTypeMeta(type).tile
                         )}
                         aria-hidden="true"
                       >

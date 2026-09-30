@@ -17,6 +17,7 @@ import { BusinessLineChart, MonthlyTrendChart } from "@/components/DashboardChar
 import { DocumentActions } from "@/components/documents/DocumentActions";
 import { ContractStateDot } from "@/components/documents/DocumentStatus";
 import { toIsoDate } from "@/lib/contract-lifecycle";
+import { docTypeMeta, isContractType } from "@/lib/doc-types";
 
 /**
  * Dashboard — KPI yang bisa ditindaklanjuti.
@@ -34,12 +35,8 @@ import { toIsoDate } from "@/lib/contract-lifecycle";
  * `now` datang dari server sebagai prop supaya render deterministik.
  */
 
-const TYPE_TILES = {
-  pkwt: "bg-emerald-100 text-emerald-700",
-  sk: "bg-amber-100 text-amber-700",
-  memo: "bg-slate-100 text-slate-700",
-  sp: "bg-red-100 text-red-700",
-};
+// Warna badge dari lib/doc-types.js — satu sumber untuk semua halaman.
+const tileFor = (type) => docTypeMeta(type).tile;
 
 const fmtInt = (n) => Number(n || 0).toLocaleString("id-ID");
 
@@ -290,7 +287,7 @@ export function DashboardRevamp({ now, kpis, trend, byLine, recent, truncated, q
               <tbody>
                 {visibleRecent.map((log) => {
                   const type = (log.document_type || "").toLowerCase();
-                  const tile = TYPE_TILES[type] || "bg-surface-3 text-text-2";
+                  const tile = tileFor(type);
                   return (
                     <tr
                       key={log.id}
@@ -339,7 +336,7 @@ export function DashboardRevamp({ now, kpis, trend, byLine, recent, truncated, q
                         <time dateTime={log.created_at}>{fmtDate(log.created_at)}</time>
                       </td>
                       <td className="hidden px-4 py-2.5 md:table-cell">
-                        {type === "pkwt" ? (
+                        {isContractType(type) ? (
                           <ContractStateDot
                             tanggalBerakhir={toIsoDate(log.tanggal_berakhir)}
                             now={now}

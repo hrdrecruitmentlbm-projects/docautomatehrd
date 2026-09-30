@@ -215,6 +215,24 @@ export function DocumentHealth() {
                           akan tanpa kop.
                         </p>
                       )}
+                      {/* TTD hanya relevan untuk Paklaring. Kehilangan tanda
+                          tangan bukan dokumen rusak (nama & jabatan sudah
+                          hardcode di template), tapi tetap perlu terlihat di
+                          sini — lebih baik diketahui sebelum produksi. */}
+                      {r.docType === "paklaring" && !r.adaPenandaTtd && (
+                        <p className="mt-1.5 flex items-start gap-1.5 text-xs text-amber-800">
+                          <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+                          Tidak ada penanda TTD — gambar tanda tangan + stempel
+                          tidak akan disisipkan otomatis.
+                        </p>
+                      )}
+                      {r.docType === "paklaring" && r.adaPenandaTtd && !r.adaPenandaKop && (
+                        <p className="mt-1.5 flex items-start gap-1.5 text-xs text-amber-800">
+                          <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+                          Stempel tiap perusahaan (TTD &lt;KODE&gt;.png) hanya
+                          terpakai kalau template punya penanda KOP juga.
+                        </p>
+                      )}
                       {r.tidakDikenal.length === 0 && r.adaPenandaKop && (
                         <p className="mt-1.5 text-xs text-emerald-700">
                           {r.total} penanda, semuanya bisa diisi.

@@ -19,6 +19,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { canDuplicateType } from "@/lib/doc-types";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -97,7 +98,9 @@ export function DocumentActions({
   const [verifying, setVerifying] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
 
-  const isPkwt = documentType === "pkwt";
+  // "Buat Salinan" = kontrak baru dengan nomor baru untuk karyawan yang sama
+  // (perpanjangan / koreksi / cetak ulang). Hanya masuk akal untuk PKWT.
+  const canDuplicate = canDuplicateType(documentType);
 
   const onCopy = async () => {
     if (!docUrl) return;
@@ -209,7 +212,7 @@ export function DocumentActions({
             Unduh PDF
           </Button>
         </a>
-        {isPkwt && (
+        {canDuplicate && (
           <Button variant="outline" className="h-10 w-full" onClick={() => setDupOpen(true)}>
             <Copy className="mr-2 size-4" aria-hidden="true" />
             Buat Salinan
@@ -279,7 +282,7 @@ export function DocumentActions({
               Unduh PDF
             </DropdownMenuItem>
 
-            {isPkwt && (
+            {canDuplicate && (
               <>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => setDupOpen(true)}>

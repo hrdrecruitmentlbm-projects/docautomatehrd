@@ -3,6 +3,7 @@ import Link from "next/link";
 import { FileText, Inbox, FolderOpen, ArrowUpDown } from "lucide-react";
 import { DocumentActions } from "@/components/documents/DocumentActions";
 import { ContractStateDot } from "@/components/documents/DocumentStatus";
+import { DOC_TYPE_ORDER, docTypeMeta, isContractType } from "@/lib/doc-types";
 
 /**
  * Documents hub: folder strip + Files table.
@@ -13,14 +14,12 @@ import { ContractStateDot } from "@/components/documents/DocumentStatus";
  *   (25/page, hard cap 50 rendered rows per virtualize rule).
  */
 
-const TYPE_META = {
-  pkwt: { label: "PKWT", tile: "bg-emerald-100 text-emerald-700", dot: "bg-primary" },
-  sk: { label: "SK", tile: "bg-amber-100 text-amber-700", dot: "bg-amber-600" },
-  memo: { label: "Memo", tile: "bg-slate-100 text-slate-700", dot: "bg-slate-500" },
-  sp: { label: "SP", tile: "bg-red-100 text-red-700", dot: "bg-red-600" },
-};
+// Metadata jenis dokumen TIDAK ditulis di sini — semuanya datang dari
+// lib/doc-types.js. Daftar lokal pernah ada di tujuh file sekaligus, dan
+// jenis kelima (Paklaring) hampir pasti akan lupa di salah satunya.
+const TYPE_META = Object.fromEntries(DOC_TYPE_ORDER.map((t) => [t, docTypeMeta(t)]));
 
-const VALID_TYPES = ["semua", "pkwt", "sk", "memo", "sp"];
+const VALID_TYPES = ["semua", ...DOC_TYPE_ORDER];
 const VALID_SORTS = ["tanggal-desc", "tanggal-asc", "nama-asc", "nama-desc"];
 const PAGE_SIZE = 25;
 const MAX_ROWS = 50; // never render more than this without virtualization
@@ -56,7 +55,10 @@ export default async function DocumentsHubPage({ searchParams }) {
 
   // Exact counts (head queries): folder strip = true inventory numbers,
   // so they need no window label (unlike the dashboard's capped totals).
-  const countQueries = ["pkwt", "sk", "memo", "sp"].map((t) =>
+  // Diurut dari DOC_TYPE_ORDER, lalu counts dibangun dari posisi yang sama —
+  // dua daftar yang harus sinkron tapi dihitung terpisah adalah cara paling
+  // umum untuk filter yang salah jumlah.
+  const countQueries = DOC_TYPE_ORDER.map((t) =>
     supabaseAdmin
       .from("document_logs")
       .select("id", { count: "exact", head: true })
@@ -87,13 +89,11 @@ export default async function DocumentsHubPage({ searchParams }) {
   const firstError = listResult.error || countResults.find((r) => r.error)?.error;
   if (firstError) throw new Error(`Gagal memuat dokumen: ${firstError.message}`);
 
-  const counts = {
-    pkwt: countResults[0].count || 0,
-    sk: countResults[1].count || 0,
-    memo: countResults[2].count || 0,
-    sp: countResults[3].count || 0,
-  };
-  const totalCount = countResults[4].count || 0;
+  const counts = {};
+  DOC_TYPE_ORDER.forEach((t, i) => {
+    counts[t] = countResults[i].count || 0;
+  });
+  const totalCount = countResults[DOC_TYPE_ORDER.length].count || 0;
 
   const rows = listResult.data || [];
   const shownTotal = listResult.count || 0;
@@ -295,7 +295,11 @@ export default async function DocumentsHubPage({ searchParams }) {
                 <tbody>
                   {rows.map((log) => {
                     const t = (log.document_type || "").toLowerCase();
-                    const meta = TYPE_META[t] || { label: log.document_type, tile: "bg-surface-3 text-text-2" };
+                    // docTypeMeta() sudah mengembalikan badge netral untuk
+                    // jenis yang tidak dikenal, SERTA mempertahankan label
+                    // aslinya — jadi log lama / template lain tidak pernah
+                    // membuat halaman ini crash di TypeError.
+                    const meta = TYPE_META[t] || docTypeMeta(log.document_type);
                     const dateStr = new Date(log.created_at).toLocaleDateString("id-ID", {
                       day: "2-digit",
                       month: "short",
@@ -333,7 +337,7 @@ export default async function DocumentsHubPage({ searchParams }) {
                           <time dateTime={log.created_at}>{dateStr}</time>
                         </td>
                         <td className="hidden px-4 py-2.5 md:table-cell">
-                          {t === "pkwt" ? (
+                          {isContractType(t) ? (
                             <ContractStateDot tanggalBerakhir={log.tanggal_berakhir} now={now} />
                           ) : (
                             <span className="text-xs text-text-2">-</span>

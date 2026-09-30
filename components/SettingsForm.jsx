@@ -6,17 +6,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { documentConfigs } from "@/lib/document-configs";
+import { DOC_TYPE_ORDER, docTypeMeta } from "@/lib/doc-types";
 import { toast } from "sonner";
 import { Save, Loader2 } from "lucide-react";
 
-// Per-type marker dots, bound to the shared doc-type palette
+// Per-type marker dots, from the shared doc-type palette
 // (agrees with badges, donut cells, legend dots, folder strip).
-const DOT_COLORS = {
-  pkwt: "bg-primary",
-  sk: "bg-amber-600",
-  memo: "bg-slate-500",
-  sp: "bg-red-600",
-};
+// Satu sumber: lib/doc-types.js.
+const DOT_COLORS = Object.fromEntries(
+  DOC_TYPE_ORDER.map((t) => [t, docTypeMeta(t).dot])
+);
 
 /**
  * Settings: one panel, two hairline sections (rendered by the page), real

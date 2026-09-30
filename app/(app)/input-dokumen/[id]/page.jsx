@@ -13,6 +13,7 @@ import {
   monthsUntil,
   DOKUMEN_STATUS,
 } from "@/lib/contract-lifecycle";
+import { docTypeMeta, isContractType, DOC_TYPE_ORDER } from "@/lib/doc-types";
 
 /**
  * Rincian satu dokumen.
@@ -31,12 +32,9 @@ import {
  * di kertas — dan justru itulah yang dibutuhkan untuk memverifikasi.
  */
 
-const TYPE_META = {
-  pkwt: { label: "PKWT", tile: "bg-emerald-100 text-emerald-700" },
-  sk: { label: "SK", tile: "bg-amber-100 text-amber-700" },
-  memo: { label: "Memo", tile: "bg-slate-100 text-slate-700" },
-  sp: { label: "SP", tile: "bg-red-100 text-red-700" },
-};
+const TYPE_META = Object.fromEntries(
+  DOC_TYPE_ORDER.map((t) => [t, docTypeMeta(t)])
+);
 
 export default async function DocumentDetailPage({ params }) {
   const { id } = await params;
@@ -60,6 +58,7 @@ export default async function DocumentDetailPage({ params }) {
     const { data } = await supabaseAdmin
       .from("document_logs")
       .select("id,document_number,document_type,created_at,tanggal_berakhir,google_doc_url,employee_name")
+
       .eq("employee_nama_key", employeeKey)
       .neq("id", log.id)
       .order("created_at", { ascending: false })
@@ -68,7 +67,8 @@ export default async function DocumentDetailPage({ params }) {
   }
 
   const type = (log.document_type || "").toLowerCase();
-  const meta = TYPE_META[type] || { label: log.document_type, tile: "bg-surface-3 text-text-2" };
+  const meta = TYPE_META[type] || docTypeMeta(log.document_type);
+  const contract = isContractType(type);
 
   const snapshot = log.form_data || {};
   const employee = snapshot.employee || null;
@@ -84,6 +84,14 @@ export default async function DocumentDetailPage({ params }) {
   const state = log.tanggal_berakhir || snapshot.tanggal_berakhir
     ? stateKontrak(endIso)
     : null;
+
+  // Paklaring tidak punya tanggal_mulai di document_logs — masa kerjanya
+  // datang dari employees.tanggal_masuk, jadi diambil dari snapshot arsip.
+  // Nilai LIVE dari master sengaja tidak dipakai: halaman ini harus
+  // menampilkan angka yang benar-benar tercetak di kertas, sama seperti
+  // kolom lain di halaman ini.
+  const masukIso = employee?.tanggal_masuk || snapshot.tanggal_masuk || null;
+  const keluarIso = toIsoDate(log.tanggal_keluar || snapshot.tanggal_keluar);
 
   const unfilled = log.unfilled_marks || [];
 
@@ -161,6 +169,7 @@ export default async function DocumentDetailPage({ params }) {
                   payroll={payroll}
                   company={company}
                   archived
+                  showPayroll={contract}
                 />
               ) : (
                 <p className="text-sm text-text-2">
@@ -171,7 +180,7 @@ export default async function DocumentDetailPage({ params }) {
             </div>
           </section>
 
-          {type === "pkwt" && (
+          {contract && (
             <section
               aria-labelledby="masa-kontrak-heading"
               className="rounded-lg border border-border bg-surface-1 p-5"
@@ -212,6 +221,36 @@ export default async function DocumentDetailPage({ params }) {
                   Ditandatangani: <span className="text-text-1">{snapshot.tanggal_ttd}</span>
                 </p>
               )}
+            </section>
+          )}
+
+          {type === "paklaring" && (
+            <section
+              aria-labelledby="periode-bekerja-heading"
+              className="rounded-lg border border-border bg-surface-1 p-5"
+            >
+              <h3 id="periode-bekerja-heading" className="text-[15px] font-semibold text-text-1">
+                Periode Bekerja
+              </h3>
+              <p className="mt-1 max-w-prose text-sm text-text-2">
+                Dua nilai yang tercetak di surat:{" "}
+                <code className="rounded bg-surface-3 px-1 font-mono text-xs">{"{{TANGGAL MASUK}}"}</code>{" "}
+                sampai <code className="rounded bg-surface-3 px-1 font-mono text-xs">{"{{today}}"}</code>.
+              </p>
+              <dl className="mt-3 grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2">
+                <div>
+                  <dt className="text-xs text-text-2">Masuk</dt>
+                  <dd className="text-sm font-medium text-text-1">
+                    {formatIsoId(toIsoDate(masukIso))}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-text-2">Keluar</dt>
+                  <dd className="text-sm font-medium text-text-1">
+                    {formatIsoId(keluarIso)}
+                  </dd>
+                </div>
+              </dl>
             </section>
           )}
         </div>
@@ -338,7 +377,7 @@ export default async function DocumentDetailPage({ params }) {
                       })}
                     </span>
                   </span>
-                  {sEnd ? (
+                  {sEnd && isContractType(s.document_type) ? (
                     <ContractStateBadge tanggalBerakhir={sEnd} />
                   ) : (
                     <span className="text-xs text-text-2">-</span>

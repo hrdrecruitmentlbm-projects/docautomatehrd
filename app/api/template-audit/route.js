@@ -30,8 +30,9 @@ export async function GET() {
     const [{ data: companyMap }, { data: settings }] = await Promise.all([
       supabaseAdmin
         .from("company_map")
-        .select("lini_bisnis,company_code,legal_name,pkwt_template_id")
-        .not("pkwt_template_id", "is", null),
+        .select("lini_bisnis,company_code,legal_name,pkwt_template_id,paklaring_template_id"),
+      // Sengaja TIDAK memfilter pkwt_template_id di query: baris yang punya
+      // template Paklaring tapi tidak punya template PKWT tetap harus diaudit.
       supabase
         .from("settings")
         .select("pkwt_template_id,sk_template_id,memo_template_id,sp_template_id")
@@ -39,16 +40,34 @@ export async function GET() {
         .maybeSingle(),
     ]);
 
-    // Kumpulkan target unik: satu baris company_map per template PKWT,
-    // lalu template SK/Memo/SP sebagai target terpisah.
+    // Kumpulkan target unik: satu baris company_map per template, lalu
+    // template SK/Memo/SP sebagai target terpisah. Setiap target membawa
+    // docType-nya, karena himpunan penanda yang valid berbeda per jenis —
+    // template Paklaring yang di-audit dengan key PKWT akan dilaporkan
+    // rusak padahal isinya lengkap.
     const targets = [];
     for (const row of companyMap || []) {
-      if (!isValidGoogleId(row.pkwt_template_id)) continue;
-      targets.push({
-        key: `company:${row.lini_bisnis}`,
-        label: `PKWT — ${row.lini_bisnis}${row.company_code ? ` (${row.company_code})` : " (tanpa KOP)"}`,
-        templateId: row.pkwt_template_id,
-      });
+      if (isValidGoogleId(row.pkwt_template_id)) {
+        targets.push({
+          key: `company:${row.lini_bisnis}`,
+          label: `PKWT — ${row.lini_bisnis}${row.company_code ? ` (${row.company_code})` : " (tanpa KOP)"}`,
+          templateId: row.pkwt_template_id,
+          docType: "pkwt",
+          needsMark: "kop",
+        });
+      }
+      if (isValidGoogleId(row.paklaring_template_id)) {
+        targets.push({
+          key: `company:${row.lini_bisnis}:paklaring`,
+          label: `Paklaring — ${row.lini_bisnis}${row.company_code ? ` (${row.company_code})` : " (tanpa KOP)"}`,
+          templateId: row.paklaring_template_id,
+          docType: "paklaring",
+          // Paklaring butuh DUA penanda gambar: KOP di atas, TTD di bawah.
+          // Keduanya optional (bisa disisipkan manual), jadi tidak dihitung
+          // sebagai masalah — hanya ditampilkan supaya terlihat.
+          needsMark: null,
+        });
+      }
     }
     for (const [type, label] of [
       ["sk", "SK"],
@@ -57,7 +76,7 @@ export async function GET() {
     ]) {
       const id = settings?.[`${type}_template_id`];
       if (id && isValidGoogleId(id)) {
-        targets.push({ key: `settings:${type}`, label: `${label}`, templateId: id });
+        targets.push({ key: `settings:${type}`, label: `${label}`, templateId: id, docType: type, needsMark: "kop" });
       }
     }
 
@@ -71,17 +90,28 @@ export async function GET() {
 
     const results = [];
     for (const [templateId, users] of byTemplate) {
-      const audit = await auditTemplate(session.accessToken, templateId);
+      // Satu template bisa dipakai dua jenis (mis. yang sama untuk PKWT dan
+      // Paklaring) — audit sekali per jenis, jangan saling menimpa.
+      const byDocType = new Map();
       for (const u of users) {
-        results.push({
-          key: u.key,
-          label: u.label,
-          templateId,
-          ...audit,
-          problems: audit.ok
-            ? audit.tidakDikenal.length + (audit.adaPenandaKop ? 0 : 1)
-            : 1,
-        });
+        if (!byDocType.has(u.docType)) byDocType.set(u.docType, []);
+        byDocType.get(u.docType).push(u);
+      }
+      for (const [docType, group] of byDocType) {
+        const audit = await auditTemplate(session.accessToken, templateId, docType);
+        for (const u of group) {
+          // Penanda gambar yang WAJIB ada hanya menambah satu masalah kalau
+          // hilang. Kalau needsMark null, tidak ada yang dihitung.
+          const missingMark =
+            u.needsMark && audit.ok && !audit[`adaPenanda${u.needsMark === "kop" ? "Kop" : "Ttd"}`] ? 1 : 0;
+          results.push({
+            key: u.key,
+            label: u.label,
+            templateId,
+            ...audit,
+            problems: audit.ok ? audit.tidakDikenal.length + missingMark : 1,
+          });
+        }
       }
     }
 

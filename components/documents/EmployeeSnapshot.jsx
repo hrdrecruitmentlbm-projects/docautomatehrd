@@ -2,12 +2,18 @@ import Link from "next/link";
 import { formatRp, formatTanggalId } from "@/lib/pkwt";
 
 /**
- * Tiga kartu: Data Pribadi | Payroll | Perusahaan.
+ * Kartu: Data Pribadi | Payroll | Perusahaan.
  *
  * Dipakai oleh langkah "Verifikasi data" di PkwtAutoForm (data LIVE dari
  * master+payroll) dan oleh halaman Rincian (data ARSIP dari form_data).
  * Keduanya sengaja memakai komponen yang sama supaya tampilan tidak
  * berbeda, meski sumber datanya berbeda.
+ *
+ * `showPayroll=false` untuk jenis dokumen yang isinya tidak memuat gaji —
+ * sekarang cuma Paklaring (Surat Keterangan Kerja). Kartu payroll lalu
+ * disembunyikan TOTAL, bukan ditampilkan dengan "Rp 0,-": kolom gaji yang
+ * tidak relevan membuat pengguna mengira ada data yang belum terisi, lalu
+ * syncing payroll demi surat yang memang tidak memintanya.
  */
 
 function Field({ label, children, mono }) {
@@ -33,13 +39,21 @@ function Card({ title, children, sub }) {
   );
 }
 
-export function EmployeeSnapshot({ employee, payroll, company, archived = false }) {
+export function EmployeeSnapshot({
+  employee,
+  payroll,
+  company,
+  archived = false,
+  showPayroll = true,
+}) {
   const emp = employee || {};
   const pay = payroll || null;
   const hasPayroll = pay && Object.keys(pay).length > 0;
 
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+    <div
+      className={`grid grid-cols-1 gap-4 ${showPayroll ? "md:grid-cols-3" : "md:grid-cols-2"}`}
+    >
       <Card title="Data Pribadi">
         <dl className="space-y-1.5 text-sm">
           <Field label="Nama">{emp.nama_asli || "-"}</Field>
@@ -56,6 +70,7 @@ export function EmployeeSnapshot({ employee, payroll, company, archived = false 
         </dl>
       </Card>
 
+      {showPayroll && (
       <Card title="Payroll" sub={hasPayroll ? pay.periode_bulan : undefined}>
         {hasPayroll ? (
           <dl className="space-y-1.5 text-sm">
@@ -97,6 +112,7 @@ export function EmployeeSnapshot({ employee, payroll, company, archived = false 
           </p>
         )}
       </Card>
+      )}
 
       <Card title="Perusahaan">
         <dl className="space-y-1.5 text-sm">

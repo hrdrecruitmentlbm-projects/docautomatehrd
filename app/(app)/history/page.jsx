@@ -3,6 +3,8 @@ import { supabaseAdmin } from "@/lib/supabase";
 import Link from "next/link";
 import { ExternalLink, FileText, Plus } from "lucide-react";
 import { CopyLinkButton } from "@/components/documents/CopyLinkButton";
+import { docTypeMeta } from "@/lib/doc-types";
+
 
 /**
  * History: PERSONAL recency list (eq user_email) — unlike Documents and
@@ -17,12 +19,10 @@ const MAX_ROWS = 50;
 const COLUMNS =
   "id, employee_name, document_type, user_email, created_at, google_doc_url, document_number";
 
-const TYPE_TILES = {
-  pkwt: "bg-emerald-100 text-emerald-700",
-  sk: "bg-amber-100 text-amber-700",
-  memo: "bg-slate-100 text-slate-700",
-  sp: "bg-red-100 text-red-700",
-};
+// Warna badge dari lib/doc-types.js — satu sumber untuk semua halaman.
+// Dipakai sebagai fungsi, bukan objek, supaya jenis yang tidak dikenal
+// (log lama, template lain) tetap dapat badge netral.
+const tileFor = (type) => docTypeMeta(type).tile;
 
 export default async function HistoryPage({ searchParams }) {
   const session = await auth();
@@ -100,7 +100,7 @@ export default async function HistoryPage({ searchParams }) {
                 <tbody>
                   {rows.map((log) => {
                     const t = (log.document_type || "").toLowerCase();
-                    const tile = TYPE_TILES[t] || "bg-surface-3 text-text-2";
+                    const tile = tileFor(t);
                     return (
                       <tr key={log.id} className="border-b border-row-border transition-colors last:border-b-0 hover:bg-surface-0">
                         <td className="px-5 py-2.5 tabular text-text-2">
