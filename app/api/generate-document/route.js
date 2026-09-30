@@ -23,6 +23,21 @@ export async function POST(req) {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    // auth.js menandai refresh yang gagal, tapi selama ini tidak ada yang
+    // membacanya — akibatnya pengguna tetap mengirim request dengan token
+    // mati dan menerima 401 mentah dari Google ("invalid credential").
+    // Ini jauh lebih bisa ditindaklanjuti: cukup login ulang.
+    if (session.error === "RefreshAccessTokenError") {
+      return Response.json(
+        {
+          error:
+            "Sesi Google Anda sudah kedaluwarsa. Keluar lalu masuk kembali " +
+            "untuk memperbarui token — dokumen gagal karena sesi, bukan data Anda.",
+        },
+        { status: 401 }
+      );
+    }
+
     const body = await req.json();
     const { documentType, companyCode, formData, employeeKey, manual } = body;
 
@@ -50,11 +65,22 @@ export async function POST(req) {
     // ---- Cabang otomatis: cari nama -> data terisi sendiri ----
     // PKWT butuh payroll, Paklaring tidak. Keduanya punya generator sendiri;
     // yang di sini hanya memilih jalurnya.
+    //
+    // PENTING: panggil handleAutoDoc SATU kali. Sebelumnya POST memanggil
+    // handleAutoDoc(handlePkwtAuto, ...) dan handlePkwtAuto sendiri memanggil
+    // handleAutoDoc(...) — dua lapis. Lapis dalam mengembalikan Response yang
+    // benar; lapis luar memakannya sebagai hasil generator:
+    //     if (!result.ok)          // Response.ok = boolean, false untuk 500
+    //     return { error: result.error }   // Response.error = undefined
+    // Alhasil pesan asli dibuang dan pengguna melihat "Terjadi kesalahan".
+    // Jebakannya: Response.ok/.status menabrak bentuk { ok, status } milik
+    // generator. Selesaikan dengan satu lapis, dan pertahankan guard di
+    // handleAutoDoc untuk jaga-jaga.
     if (documentType === 'pkwt' && employeeKey) {
-      return handleAutoDoc(handlePkwtAuto, { session, settings, employeeKey, manual });
+      return handleAutoDoc(generatePkwt, { session, settings, employeeKey, manual });
     }
     if (documentType === 'paklaring' && employeeKey) {
-      return handleAutoDoc(handlePaklaringAuto, { session, settings, employeeKey, manual });
+      return handleAutoDoc(generatePaklaring, { session, settings, employeeKey, manual });
     }
 
     // ---- Alur lama (SK/Memo/SP + fallback PKWT manual) ----
@@ -131,22 +157,6 @@ export async function POST(req) {
 }
 
 /**
- * PKWT otomatis. Logikanya hidup di lib/generate-pkwt.js supaya
- * "Buat Salinan" memakai jalur yang persis sama — bukan salinan kode
- * yang bisa melenceng diam-diam.
- */
-async function handlePkwtAuto({ session, settings, employeeKey, manual = {} }) {
-  return handleAutoDoc(generatePkwt, { session, settings, employeeKey, manual });
-}
-
-/**
- * Paklaring otomatis. Logikanya hidup di lib/generate-paklaring.js.
- */
-async function handlePaklaringAuto({ session, settings, employeeKey, manual = {} }) {
-  return handleAutoDoc(generatePaklaring, { session, settings, employeeKey, manual });
-}
-
-/**
  * Bentuk respons generik untuk generator otomatis.
  *
  * Generator SANGGUP melempar: copyTemplate() dan replacePlaceholders() berbuat
@@ -156,17 +166,18 @@ async function handlePaklaringAuto({ session, settings, employeeKey, manual = {}
  * `.catch()` di sini WAJIB, bukan sekadar rapih. Tanpanya:
  *   return handleAutoDoc(...)   <- return promise dari dalam try
  * tidak pernah memicu catch di POST (try/catch hanya menangkap throw sinkron).
- * Penolakan lolos ke Next.js, yang membalas body tanpa kunci `error`, dan
- * pengguna melihat "Terjadi kesalahan" tanpa petunjuk apa pun — persis yang
- * terjadi pada percobaan Paklaring pertama.
+ * Penolakan lolos ke Next.js, yang membalas body tanpa kunci `error`.
  *
- * Menangkap SEMUA penolakan berarti setiap kegagalan tiba di UI sebagai
- * JSON {error} dengan status yang benar, termasuk untuk PKWT.
+ * Guard `result instanceof Response` menolak hasil yang SUDAH berupa Response.
+ * Ini yang menangkap penggunaan bersarang (handleAutoDoc(dalam
+ * handleAutoDoc(...))) — tanpanya Response.ok (boolean) dibaca seolah-olah
+ * generator bilang "gagal", dan error asli dibuang diam-diam.
  */
 function handleAutoDoc(generate, args) {
   return Promise.resolve()
     .then(() => generate(args))
     .then((result) => {
+      if (result instanceof Response) return result;
       if (!result.ok) {
         return Response.json({ error: result.error }, { status: result.status });
       }
