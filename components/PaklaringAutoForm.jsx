@@ -151,7 +151,15 @@ export function PaklaringAutoForm() {
         }),
       });
       const data = await readJson(response);
-      if (!response.ok) throw new Error(data.error || "Terjadi kesalahan");
+      if (!response.ok) {
+        // `data.error` bisa kosong kalau balasannya bukan JSON dari route ini
+        // (mis. body `{"digest":...}` dari Next.js). Jangan pernah menampilkan
+        // "Terjadi kesalahan" tanpa status — itu titik mati bagi siapa pun
+        // yang mencoba mendiagnosis.
+        throw new Error(
+          data.error || `Server merespons ${response.status} tanpa pesan. Periksa Vercel → Logs.`
+        );
+      }
       setResult(data);
       toast.success(`Paklaring ${data.documentNumber} berhasil dibuat!`);
     } catch (error) {

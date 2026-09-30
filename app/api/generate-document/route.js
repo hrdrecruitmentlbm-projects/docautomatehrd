@@ -149,17 +149,39 @@ async function handlePaklaringAuto({ session, settings, employeeKey, manual = {}
 /**
  * Bentuk respons generik untuk generator otomatis.
  *
- * Semua generator otomatis mengembalikan { ok:false, status, error } atau
- * { ok:true, ...payload } dan tidak pernah melempar error. Fungsi ini
- * memetakan bentuk itu ke Response, supaya setiap route tidak menulis ulang
- * pemetaannya.
+ * Generator SANGGUP melempar: copyTemplate() dan replacePlaceholders() berbuat
+ * itu sengaja, dengan pesan yang memuat ID template, ID folder, dan detail
+ * respons Google. Pesan itu adalah satu-satunya cara mengeluh di produksi.
+ *
+ * `.catch()` di sini WAJIB, bukan sekadar rapih. Tanpanya:
+ *   return handleAutoDoc(...)   <- return promise dari dalam try
+ * tidak pernah memicu catch di POST (try/catch hanya menangkap throw sinkron).
+ * Penolakan lolos ke Next.js, yang membalas body tanpa kunci `error`, dan
+ * pengguna melihat "Terjadi kesalahan" tanpa petunjuk apa pun — persis yang
+ * terjadi pada percobaan Paklaring pertama.
+ *
+ * Menangkap SEMUA penolakan berarti setiap kegagalan tiba di UI sebagai
+ * JSON {error} dengan status yang benar, termasuk untuk PKWT.
  */
 function handleAutoDoc(generate, args) {
-  return generate(args).then((result) => {
-    if (!result.ok) {
-      return Response.json({ error: result.error }, { status: result.status });
-    }
-    const { ok, ...payload } = result;
-    return Response.json(payload);
-  });
+  return Promise.resolve()
+    .then(() => generate(args))
+    .then((result) => {
+      if (!result.ok) {
+        return Response.json({ error: result.error }, { status: result.status });
+      }
+      const { ok, ...payload } = result;
+      return Response.json(payload);
+    })
+    .catch((error) => {
+      console.error("Auto document generation threw:", error);
+      return Response.json(
+        {
+          error:
+            error?.message ||
+            "Terjadi kesalahan saat membuat dokumen. Periksa Vercel → Logs.",
+        },
+        { status: 500 }
+      );
+    });
 }
