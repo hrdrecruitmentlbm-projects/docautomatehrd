@@ -2,6 +2,7 @@ import { auth } from "@/auth";
 import { supabaseAdmin } from "@/lib/supabase";
 import { google } from "googleapis";
 import { getGoogleClient } from "@/lib/google";
+import { buildDownloadFileName } from "@/lib/file-name";
 
 export const maxDuration = 60;
 
@@ -41,13 +42,10 @@ export async function GET(_req, { params }) {
     });
 
     const bytes = Buffer.from(res.data);
-    // Nama file dari nomor dokumen + nama orang, dibersihkan agar aman
-    // untuk Content-Disposition.
-    const base = `${(log.document_number || "dokumen").replace(/\//g, "-")} - ${
-      log.employee_name || log.document_type || "dokumen"
-    }`
-      .replace(/[^\w\s.-]/g, "")
-      .trim();
+    // Nama unduhan mengikuti nama berkas di Drive (nomor utuh + "_" + nama),
+    // kecuali "/" yang diganti "-" karena ilegal di Windows/macOS/Android.
+    // Lihat lib/file-name.js untuk format dan alasannya.
+    const base = buildDownloadFileName(log.document_number, log.employee_name || log.document_type);
 
     return new Response(new Uint8Array(bytes), {
       status: 200,

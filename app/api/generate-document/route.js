@@ -5,6 +5,7 @@ import { copyTemplate, replacePlaceholders, buildDocUrl } from "@/lib/google";
 import { generateDocumentNumber } from "@/lib/auto-numbering";
 import { generatePkwt } from "@/lib/generate-pkwt";
 import { generatePaklaring } from "@/lib/generate-paklaring";
+import { buildDocumentFileName } from "@/lib/file-name";
 
 // WAJIB: rantai ini memanggil Google Docs API beberapa kali — copy template,
 // batchUpdate penanda, insert gambar KOP, docs.get untuk pemeriksaan hasil,
@@ -123,7 +124,8 @@ export async function POST(req) {
     replacements.tanggal_surat = today.toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' });
 
     // 4. Google Docs API Operations
-    const fileName = `${documentNumber.replace(/\//g, '_')} - ${formData.nama_karyawan || 'Document'}`;
+    // Nama berkas = nomor surat utuh + "_" + nama. Lihat lib/file-name.js.
+    const fileName = buildDocumentFileName(documentNumber, formData.nama_karyawan);
     const docId = await copyTemplate(session.accessToken, templateId, fileName, folderId);
 
     await replacePlaceholders(session.accessToken, docId, replacements);
