@@ -22,7 +22,11 @@ const plexMono = IBM_Plex_Mono({
 
 export const metadata = {
   title: "HR Document Automation",
-  description: "Generate HR Documents automatically to Google Docs",
+  description: "Generate HR Documents automatically to Google Docs and Google Drive for Indonesian HR professionals.",
+  openGraph: {
+    title: "HR Document Automation",
+    description: "Generate HR Documents automatically to Google Docs and Google Drive for Indonesian HR professionals.",
+  },
 };
 
 export default function RootLayout({ children }) {

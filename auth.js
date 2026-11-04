@@ -29,6 +29,8 @@ async function refreshAccessToken(token) {
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  secret: process.env.AUTH_SECRET || "development-secret-for-docautomatehrd-session-encryption-32chars",
+  trustHost: true,
   providers: [
     Google({
       clientId: process.env.AUTH_GOOGLE_ID,

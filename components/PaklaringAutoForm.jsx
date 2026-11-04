@@ -556,9 +556,9 @@ export function PaklaringAutoForm() {
               className={`h-10 ${fieldErrors.tanggal_keluar ? "border-red-600" : ""}`}
             />
             <p id="paklaring-tanggal-hint" className="text-xs text-text-2">
-              Dipakai dua kali di surat, jadi selalu sama: "sampai
-              <span className="font-mono"> {"{{today}}"}</span>" di badan surat dan "Purwokerto,{" "}
-              <span className="font-mono">{"{{today}}"}</span>". Arsip juga
+              Dipakai dua kali di surat, jadi selalu sama: &quot;sampai
+              <span className="font-mono"> {"{{today}}"}</span>&quot; di badan surat dan &quot;Purwokerto,{" "}
+              <span className="font-mono">{"{{today}}"}</span>&quot;. Arsip juga
               memakai bulan dari tanggal ini.
             </p>
             {fieldErrors.tanggal_keluar && (
