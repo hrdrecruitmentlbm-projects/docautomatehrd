@@ -34,7 +34,10 @@ export async function POST(req) {
 
     if (result.error) {
       console.error("Supabase Settings Error:", result.error);
-      return Response.json({ error: "Gagal menyimpan ke database" }, { status: 500 });
+      return Response.json(
+        { error: `Gagal menyimpan: ${result.error.message}` },
+        { status: 500 }
+      );
     }
 
     return Response.json({ success: true });
