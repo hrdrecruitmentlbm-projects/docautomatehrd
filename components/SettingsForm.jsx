@@ -37,7 +37,10 @@ export function SettingsForm({ initialSettings = {} }) {
         body: JSON.stringify(data),
       });
 
-      if (!response.ok) throw new Error("Gagal menyimpan pengaturan");
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.error || "Gagal menyimpan pengaturan");
+      }
 
       setSavedAt(new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }));
       toast.success("Pengaturan berhasil disimpan!");
