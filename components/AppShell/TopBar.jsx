@@ -26,6 +26,7 @@ import {
 import { resolveRouteMeta } from "@/lib/route-meta";
 import { SearchPalette } from "@/components/AppShell/SearchPalette";
 import { SyncStatus } from "@/components/AppShell/SyncStatus";
+import { NotificationBell } from "@/components/AppShell/NotificationBell";
 
 /**
  * The app shell's sticky top bar (h-14).
@@ -33,7 +34,7 @@ import { SyncStatus } from "@/components/AppShell/SyncStatus";
  * search trigger (Cmd/Ctrl+K), the route's primary action, and the single
  * avatar menu (Settings + Log Out) that replaces all per-page user chips.
  */
-export function TopBar({ user, sync, onOpenDrawer, hamburgerRef }) {
+export function TopBar({ user, sync, notifications, onOpenDrawer, hamburgerRef }) {
   const pathname = usePathname();
   const router = useRouter();
   const meta = resolveRouteMeta(pathname);
@@ -148,6 +149,9 @@ export function TopBar({ user, sync, onOpenDrawer, hamburgerRef }) {
           <Plus className="size-5" />
         </Link>
       )}
+
+      {/* Notifikasi Kontrak PKWT (TAHAP 6) */}
+      <NotificationBell initialNotifications={notifications} />
 
       {/* Avatar menu — the single user chip */}
       <DropdownMenu>

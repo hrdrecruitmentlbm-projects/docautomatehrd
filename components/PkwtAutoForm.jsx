@@ -1,8 +1,9 @@
 "use client";
 import { readJson } from "@/lib/http";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import { useSearchParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -46,7 +47,13 @@ export function PkwtAutoForm() {
     reset,
   } = useEmployeeSearch();
 
-  const [tanggalMulai, setTanggalMulai] = useState(todayISO());
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
+  const [tanggalMulai, setTanggalMulai] = useState(() => {
+    const p = searchParams?.get("start") || searchParams?.get("tanggal_mulai");
+    return p ? String(p).trim() : todayISO();
+  });
   const [jangkaBulan, setJangkaBulan] = useState("12");
   const [tanggalTtd, setTanggalTtd] = useState(todayISO());
 
@@ -56,6 +63,20 @@ export function PkwtAutoForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [result, setResult] = useState(null);
   const [submitError, setSubmitError] = useState(null);
+
+  const initialPickedRef = useRef(false);
+
+  // Otomatis pilih karyawan jika diteruskan via URL query params (mis. dari tombol perpanjangan)
+  useEffect(() => {
+    if (initialPickedRef.current) return;
+    const employeeParam = searchParams?.get("employee") || searchParams?.get("karyawan");
+    const namaParam = searchParams?.get("nama") || employeeParam;
+
+    if (employeeParam && !selectedKey) {
+      initialPickedRef.current = true;
+      pickEmployee(employeeParam, namaParam);
+    }
+  }, [searchParams, selectedKey, pickEmployee]);
 
   const emp = detail?.employee;
   const pay = detail?.payroll;
@@ -112,6 +133,7 @@ export function PkwtAutoForm() {
       if (!response.ok) throw new Error(data.error || "Terjadi kesalahan");
       setResult(data);
       toast.success(`PKWT ${data.documentNumber} berhasil dibuat!`);
+      router.refresh();
     } catch (error) {
       setSubmitError(error.message);
       toast.error(error.message);

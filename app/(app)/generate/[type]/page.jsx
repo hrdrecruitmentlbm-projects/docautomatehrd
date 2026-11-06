@@ -3,6 +3,7 @@ import { DynamicForm } from "@/components/DynamicForm";
 import { PkwtAutoForm } from "@/components/PkwtAutoForm";
 import { PaklaringAutoForm } from "@/components/PaklaringAutoForm";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 
 // headerMode is "shell" for /generate/* (route-meta): the TopBar owns this
 // route's single <h1> and its back link (-> /input-dokumen). The page must
@@ -37,7 +38,9 @@ export default async function GenerateDocumentPage({ params }) {
         {auto ? auto.intro : config.description}
       </p>
 
-      {auto ? <auto.Form /> : <DynamicForm config={config} />}
+      <Suspense fallback={<div className="py-12 text-center text-sm text-text-2">Memuat form...</div>}>
+        {auto ? <auto.Form /> : <DynamicForm config={config} />}
+      </Suspense>
     </div>
   );
 }

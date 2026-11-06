@@ -6,6 +6,7 @@ import { generateDocumentNumber } from "@/lib/auto-numbering";
 import { generatePkwt } from "@/lib/generate-pkwt";
 import { generatePaklaring } from "@/lib/generate-paklaring";
 import { buildDocumentFileName } from "@/lib/file-name";
+import { revalidatePath } from "next/cache";
 
 // WAJIB: rantai ini memanggil Google Docs API beberapa kali — copy template,
 // batchUpdate penanda, insert gambar KOP, docs.get untuk pemeriksaan hasil,
@@ -182,6 +183,14 @@ function handleAutoDoc(generate, args) {
       if (result instanceof Response) return result;
       if (!result.ok) {
         return Response.json({ error: result.error }, { status: result.status });
+      }
+      try {
+        revalidatePath('/dashboard');
+        revalidatePath('/kontrak');
+        revalidatePath('/history');
+        revalidatePath('/', 'layout');
+      } catch (err) {
+        console.warn('revalidatePath warning:', err.message);
       }
       const { ok, ...payload } = result;
       return Response.json(payload);

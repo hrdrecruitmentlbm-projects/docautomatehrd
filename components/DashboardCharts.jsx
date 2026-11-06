@@ -186,3 +186,145 @@ export function MonthlyTrendChart({ data, onSelectMonth }) {
     </div>
   );
 }
+
+/** Distribusi status dokumen (Draf, Dikirim, Ditandatangani, Arsip) */
+export function StatusDistributionChart({ data, selected, onSelect }) {
+  if (!data || data.length === 0) {
+    return (
+      <div className="flex h-[200px] items-center justify-center text-sm text-text-2">
+        Belum ada data status
+      </div>
+    );
+  }
+
+  const total = data.reduce((n, d) => n + d.value, 0);
+
+  const STATUS_COLORS = {
+    draft: "#94a3b8", // Slate
+    dikirim: "#3b82f6", // Blue
+    ditandatangani: "#10b981", // Emerald
+    arsip: "#64748b", // Slate muted
+  };
+
+  return (
+    <div>
+      <div className="h-[200px] w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={data} margin={{ top: 8, right: 8, left: -22, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--row-border)" />
+            <XAxis
+              dataKey="name"
+              tick={{ fontSize: 11, fill: "var(--text-2)", fontWeight: 500 }}
+              axisLine={false}
+              tickLine={false}
+            />
+            <YAxis
+              allowDecimals={false}
+              tick={{ fontSize: 11, fill: "var(--text-2)", fontWeight: 500 }}
+              axisLine={false}
+              tickLine={false}
+              width={40}
+            />
+            <Tooltip
+              cursor={{ fill: "var(--surface-2)" }}
+              contentStyle={TOOLTIP_STYLE}
+              formatter={(value) => [
+                `${value} dokumen (${total > 0 ? Math.round((value / total) * 100) : 0}%)`,
+                "Jumlah",
+              ]}
+            />
+            <Bar
+              dataKey="value"
+              radius={[4, 4, 0, 0]}
+              maxBarSize={44}
+              cursor="pointer"
+              onClick={(d) => onSelect?.(d?.key || d?.name)}
+            >
+              {data.map((d) => (
+                <Cell
+                  key={d.name}
+                  fill={STATUS_COLORS[d.key] || "var(--brand-600)"}
+                  className={cn(
+                    "cursor-pointer transition-opacity",
+                    selected && selected !== d.key && selected !== d.name && "opacity-35"
+                  )}
+                />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+      <p className="sr-only">
+        Distribusi status dokumen: {data.map((d) => `${d.name} ${d.value}`).join(", ")}.
+      </p>
+    </div>
+  );
+}
+
+/** Distribusi durasi kontrak (mis. < 6 bln, 6 bln, 12 bln, > 12 bln, Tanpa durasi) */
+export function DurationDistributionChart({ data, selected, onSelect }) {
+  if (!data || data.length === 0) {
+    return (
+      <div className="flex h-[200px] items-center justify-center text-sm text-text-2">
+        Belum ada data durasi
+      </div>
+    );
+  }
+
+  const total = data.reduce((n, d) => n + d.value, 0);
+
+  return (
+    <div>
+      <div className="h-[200px] w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={data} margin={{ top: 8, right: 8, left: -22, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--row-border)" />
+            <XAxis
+              dataKey="label"
+              tick={{ fontSize: 11, fill: "var(--text-2)", fontWeight: 500 }}
+              axisLine={false}
+              tickLine={false}
+            />
+            <YAxis
+              allowDecimals={false}
+              tick={{ fontSize: 11, fill: "var(--text-2)", fontWeight: 500 }}
+              axisLine={false}
+              tickLine={false}
+              width={40}
+            />
+            <Tooltip
+              cursor={{ fill: "var(--surface-2)" }}
+              contentStyle={TOOLTIP_STYLE}
+              formatter={(value) => [
+                `${value} kontrak (${total > 0 ? Math.round((value / total) * 100) : 0}%)`,
+                "Jumlah",
+              ]}
+            />
+            <Bar
+              dataKey="value"
+              fill="var(--chart-2)"
+              radius={[4, 4, 0, 0]}
+              maxBarSize={44}
+              cursor="pointer"
+              onClick={(d) => onSelect?.(d?.key)}
+            >
+              {data.map((d, i) => (
+                <Cell
+                  key={d.label}
+                  fill={PALETTE[i % PALETTE.length]}
+                  className={cn(
+                    "cursor-pointer transition-opacity",
+                    selected && selected !== d.key && "opacity-35"
+                  )}
+                />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+      <p className="sr-only">
+        Distribusi durasi kontrak: {data.map((d) => `${d.label} ${d.value}`).join(", ")}.
+      </p>
+    </div>
+  );
+}

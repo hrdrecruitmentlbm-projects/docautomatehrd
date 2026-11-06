@@ -2,6 +2,8 @@ import { auth } from "@/auth";
 import { supabaseAdmin } from "@/lib/supabase";
 import { SheetsSync } from "@/components/SheetsSync";
 import { CompanyMapForm } from "@/components/CompanyMapForm";
+import { ScanRootsForm } from "@/components/ScanRootsForm";
+import { PkwtCorrectionsTable } from "@/components/PkwtCorrectionsTable";
 import { ClipboardList, ArrowRight } from "lucide-react";
 
 export default async function DataPage() {
@@ -67,6 +69,8 @@ export default async function DataPage() {
           payrollLocked={firstRun && !payrollPreset}
         />
         <CompanyMapForm />
+        <ScanRootsForm />
+        <PkwtCorrectionsTable />
       </div>
     </div>
   );
