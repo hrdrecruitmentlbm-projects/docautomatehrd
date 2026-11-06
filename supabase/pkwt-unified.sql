@@ -78,7 +78,7 @@ create or replace view v_unified_contracts as
 with app_contracts as (
   select
     'app_' || id::text as id,
-    id as source_id,
+    id::text as source_id,
     'aplikasi'::text as sumber,
     google_doc_id as file_id,
     document_number as nomor_surat,
@@ -104,7 +104,7 @@ with app_contracts as (
 drive_contracts as (
   select
     'drive_' || id::text as id,
-    id as source_id,
+    id::text as source_id,
     'drive'::text as sumber,
     file_id,
     nomor_surat,

@@ -357,7 +357,7 @@ export function ScanRootsForm() {
   };
 
   return (
-    <section aria-labelledby="scan-roots-heading" className="border-t border-border p-5 sm:p-6">
+    <section id="sumber-folder" aria-labelledby="scan-roots-heading" className="scroll-mt-20 border-t border-border p-5 sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 id="scan-roots-heading" className="flex items-center gap-2 text-[15px] font-semibold text-text-1">

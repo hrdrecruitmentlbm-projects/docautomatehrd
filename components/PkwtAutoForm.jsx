@@ -36,6 +36,7 @@ export function PkwtAutoForm() {
     searched,
     searchError,
     activeIdx,
+    setActiveIdx,
     selectedKey,
     detail,
     loadingDetail,

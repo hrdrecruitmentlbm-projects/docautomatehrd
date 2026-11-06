@@ -54,6 +54,7 @@ export function PaklaringAutoForm() {
     searched,
     searchError,
     activeIdx,
+    setActiveIdx,
     selectedKey,
     detail,
     loadingDetail,

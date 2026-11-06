@@ -693,7 +693,7 @@ export function DashboardRevamp({
                       {/* Aksi: Buat PKWT Perpanjangan */}
                       <td className="px-4 py-3 align-middle text-right">
                         <Link
-                          href={`/generate/pkwt?employee=${c.nama_key || ""}&nama=${encodeURIComponent(
+                          href={`/generate/pkwt?employee=${encodeURIComponent(c.nama_key || "")}&nama=${encodeURIComponent(
                             c.nama_asli || ""
                           )}&start=${nextStart}`}
                           className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
