@@ -1,7 +1,9 @@
 import { auth } from "@/auth";
 
 export default auth((req) => {
-  const isLoggedIn = !!req.auth;
+  // Sesi dengan error refresh dianggap belum login -> diarahkan ke /login
+  // supaya pengguna masuk ulang dan mendapat refresh token baru.
+  const isLoggedIn = !!req.auth && !req.auth.error;
   const isAuthRoute = req.nextUrl.pathname.startsWith('/login');
   const isApiAuthRoute = req.nextUrl.pathname.startsWith('/api/auth');
 

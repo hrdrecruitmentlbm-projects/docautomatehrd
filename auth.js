@@ -47,20 +47,32 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ],
   callbacks: {
     async jwt({ token, account }) {
-      // On first sign-in, store tokens and expiry
+      // Login pertama: simpan token & hapus error lama.
       if (account) {
         return {
           ...token,
           accessToken: account.access_token,
           refreshToken: account.refresh_token,
           accessTokenExpires: Date.now() + account.expires_in * 1000,
+          error: undefined,
         };
       }
-      // If token is still valid, return it
-      if (Date.now() < token.accessTokenExpires) {
+      // Refresh sudah pernah gagal -> JANGAN coba lagi di setiap request.
+      // Sebelumnya setiap auth() memanggil Google ulang dengan refresh token
+      // yang sudah mati (cookie tidak bisa diperbarui dari route handler),
+      // sehingga log Vercel dibanjiri "invalid_grant". Cukup login ulang.
+      if (token.error) {
         return token;
       }
-      // Token expired, refresh it
+      // Tidak ada refresh token sama sekali -> tidak mungkin diperbarui.
+      if (!token.refreshToken) {
+        return { ...token, error: 'RefreshAccessTokenError' };
+      }
+      // Token masih valid (buffer 60 detik)
+      if (Date.now() < token.accessTokenExpires - 60 * 1000) {
+        return token;
+      }
+      // Token kedaluwarsa -> refresh
       return refreshAccessToken(token);
     },
     async session({ session, token }) {
