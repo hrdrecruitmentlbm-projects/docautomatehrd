@@ -30,9 +30,8 @@ const NAV_GROUPS = [
       { href: "/input-dokumen", icon: FilePlus, label: "Documents", match: ["/input-dokumen", "/generate"] },
       { href: "/kontrak", icon: ClipboardCheck, label: "Kontrak", match: ["/kontrak"] },
       { href: "/data", icon: Database, label: "Data Karyawan", match: ["/data"] },
-      // Jalan pintas ke bagian di halaman Data Karyawan (match kosong: tidak ikut menyala)
-      { href: "/data#sumber-folder", icon: FolderOpen, label: "Sumber Folder Drive", match: [] },
-      { href: "/data#perlu-dicek", icon: TriangleAlert, label: "Perlu Dicek", match: [] },
+      { href: "/sumber-folder", icon: FolderOpen, label: "Sumber Folder Drive", match: ["/sumber-folder"] },
+      { href: "/perlu-dicek", icon: TriangleAlert, label: "Perlu Dicek", match: ["/perlu-dicek"] },
       { href: "/history", icon: History, label: "Activity", match: ["/history"] },
     ],
   },

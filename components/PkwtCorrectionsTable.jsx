@@ -151,7 +151,7 @@ export function PkwtCorrectionsTable() {
   };
 
   return (
-    <section id="perlu-dicek" aria-labelledby="pkwt-corrections-heading" className="scroll-mt-20 border-t border-border p-5 sm:p-6">
+    <section id="perlu-dicek" aria-labelledby="pkwt-corrections-heading" className="p-5 sm:p-6">
       {/* Header Section */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-2.5">

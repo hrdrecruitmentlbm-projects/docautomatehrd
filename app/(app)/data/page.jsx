@@ -2,8 +2,6 @@ import { auth } from "@/auth";
 import { supabaseAdmin } from "@/lib/supabase";
 import { SheetsSync } from "@/components/SheetsSync";
 import { CompanyMapForm } from "@/components/CompanyMapForm";
-import { ScanRootsForm } from "@/components/ScanRootsForm";
-import { PkwtCorrectionsTable } from "@/components/PkwtCorrectionsTable";
 import { ClipboardList, ArrowRight } from "lucide-react";
 
 export default async function DataPage() {
@@ -60,7 +58,7 @@ export default async function DataPage() {
         </div>
       )}
 
-      {/* ONE bordered panel, three hairline-divided sections */}
+      {/* ONE bordered panel, hairline-divided sections */}
       <div className="overflow-hidden rounded-lg border border-border bg-surface-1">
         <SheetsSync
           initialMasterUrl={saved.master_sheet_url || ""}
@@ -69,8 +67,6 @@ export default async function DataPage() {
           payrollLocked={firstRun && !payrollPreset}
         />
         <CompanyMapForm />
-        <ScanRootsForm />
-        <PkwtCorrectionsTable />
       </div>
     </div>
   );

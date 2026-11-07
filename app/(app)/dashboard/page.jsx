@@ -35,35 +35,49 @@ export default async function DashboardPage({ searchParams }) {
     sp.perlu_dicek !== undefined ? sp.perlu_dicek === "1" || sp.perlu_dicek === "true" : undefined;
 
   // 1. Ambil seluruh data kontrak terpadu dari getUnifiedContracts (deduplicated & unified)
-  const unifiedResult = await getUnifiedContracts({
-    periode: filterPeriode,
-    perusahaan: filterPerusahaan,
-    status: filterStatus,
-    sumber: filterSumber,
-    search: filterSearch,
-    perlu_dicek: filterPerluCek,
-    limit: 0, // Ambil semua untuk agregasi dashboard server-side
-    now,
-  });
+  let unifiedResult = { data: [], counts: {} };
+  try {
+    unifiedResult = await getUnifiedContracts({
+      periode: filterPeriode,
+      perusahaan: filterPerusahaan,
+      status: filterStatus,
+      sumber: filterSumber,
+      search: filterSearch,
+      perlu_dicek: filterPerluCek,
+      limit: 0, // Ambil semua untuk agregasi dashboard server-side
+      now,
+    });
+  } catch (err) {
+    console.error("Dashboard getUnifiedContracts error:", err);
+  }
 
-  const contracts = unifiedResult.data || [];
-  const counts = unifiedResult.counts || {};
+  const contracts = unifiedResult?.data || [];
+  const counts = unifiedResult?.counts || {};
 
   // 2. Ambil data pendukung master karyawan & payroll (gelombang paralel)
-  const [empCountQ, payCountQ, recentQ] = await Promise.all([
-    supabaseAdmin.from("employees").select("nama_key", { count: "exact", head: true }),
-    supabaseAdmin.from("payroll_latest").select("nama_key", { count: "exact", head: true }),
-    supabaseAdmin
-      .from("document_logs")
-      .select(
-        "id,employee_name,document_type,created_at,google_doc_url,document_number,user_email,tanggal_berakhir,unfilled_marks"
-      )
-      .order("created_at", { ascending: false })
-      .limit(RECENT_ROWS),
-  ]);
+  let employeesTotal = 0;
+  let missingPayroll = 0;
+  let recentDocs = [];
 
-  const employeesTotal = empCountQ.count || 0;
-  const missingPayroll = Math.max(employeesTotal - (payCountQ.count || 0), 0);
+  try {
+    const [empCountQ, payCountQ, recentQ] = await Promise.all([
+      supabaseAdmin.from("employees").select("nama_key", { count: "exact", head: true }),
+      supabaseAdmin.from("payroll_latest").select("nama_key", { count: "exact", head: true }),
+      supabaseAdmin
+        .from("document_logs")
+        .select(
+          "id,employee_name,document_type,created_at,google_doc_url,document_number,user_email,tanggal_berakhir,unfilled_marks"
+        )
+        .order("created_at", { ascending: false })
+        .limit(RECENT_ROWS),
+    ]);
+
+    employeesTotal = empCountQ?.count || 0;
+    missingPayroll = Math.max(employeesTotal - (payCountQ?.count || 0), 0);
+    recentDocs = recentQ?.data || [];
+  } catch (err) {
+    console.error("Dashboard master/payroll/recent query error:", err);
+  }
 
   // 3. Agregasi Grafik
 
@@ -185,7 +199,7 @@ export default async function DashboardPage({ searchParams }) {
       byStatus={byStatus}
       byDuration={byDuration}
       expiringContracts={expiringContracts}
-      recent={recentQ.data || []}
+      recent={recentDocs}
       companyOptions={companyOptions}
       activeFilters={{
         periode: filterPeriode || "",
