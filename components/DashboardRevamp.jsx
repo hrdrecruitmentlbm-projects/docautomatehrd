@@ -800,6 +800,8 @@ export function DashboardRevamp({
                           documentType={type}
                           tanggalMulai={log.tanggal_mulai}
                           unfilled={log.unfilled_marks}
+                          documentNumber={log.document_number}
+                          employeeName={log.employee_name}
                         />
                       </td>
                     </tr>

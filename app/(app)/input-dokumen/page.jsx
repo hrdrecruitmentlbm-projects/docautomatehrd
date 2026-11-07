@@ -355,6 +355,8 @@ export default async function DocumentsHubPage({ searchParams }) {
                             tanggalMulai={log.tanggal_mulai}
                             jangkaBulan={log.jangka_bulan}
                             unfilled={log.unfilled_marks}
+                            documentNumber={log.document_number}
+                            employeeName={log.employee_name}
                           />
                         </td>
                       </tr>

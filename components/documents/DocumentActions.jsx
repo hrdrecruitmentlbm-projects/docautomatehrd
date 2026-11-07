@@ -15,6 +15,7 @@ import {
   FolderOpen,
   Loader2,
   Check,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -88,6 +89,8 @@ export function DocumentActions({
   jangkaBulan,
   unfilled,
   size = "row",
+  documentNumber,
+  employeeName,
 }) {
   const router = useRouter();
   const [dupOpen, setDupOpen] = React.useState(false);
@@ -97,6 +100,8 @@ export function DocumentActions({
   const [dupError, setDupError] = React.useState(null);
   const [verifying, setVerifying] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
+  const [deleteOpen, setDeleteOpen] = React.useState(false);
+  const [deleteBusy, setDeleteBusy] = React.useState(false);
 
   // "Buat Salinan" = kontrak baru dengan nomor baru untuk karyawan yang sama
   // (perpanjangan / koreksi / cetak ulang). Hanya masuk akal untuk PKWT.
@@ -188,6 +193,30 @@ export function DocumentActions({
     }
   };
 
+  const onDelete = async () => {
+    setDeleteBusy(true);
+    try {
+      const res = await fetch(`/api/documents/${id}`, {
+        method: "DELETE",
+      });
+      const data = await readJson(res);
+      if (!res.ok) {
+        throw new Error(data.error || "Gagal menghapus dokumen");
+      }
+      setDeleteOpen(false);
+      toast.success(data.message || "Dokumen berhasil dihapus");
+      if (size === "detail") {
+        router.push("/input-dokumen");
+      } else {
+        router.refresh();
+      }
+    } catch (err) {
+      toast.error(err.message || "Gagal menghapus dokumen");
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
+
   // Varian "rincian": tombol yang terlihat, tanpa menu.
   if (size === "detail") {
     return (
@@ -229,6 +258,15 @@ export function DocumentActions({
             Buka folder di Drive
           </a>
         )}
+        <Button
+          variant="outline"
+          className="h-10 w-full border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 dark:border-red-900/40 dark:hover:bg-red-950/30"
+          onClick={() => setDeleteOpen(true)}
+        >
+          <Trash2 className="mr-2 size-4 text-red-600" aria-hidden="true" />
+          Hapus Dokumen
+        </Button>
+
         <DuplicateDialog
           open={dupOpen}
           onOpenChange={setDupOpen}
@@ -239,6 +277,14 @@ export function DocumentActions({
           onSubmit={onDuplicate}
           busy={dupBusy}
           error={dupError}
+        />
+        <DeleteConfirmDialog
+          open={deleteOpen}
+          onOpenChange={setDeleteOpen}
+          onSubmit={onDelete}
+          busy={deleteBusy}
+          documentNumber={documentNumber}
+          employeeName={employeeName}
         />
       </div>
     );
@@ -315,6 +361,15 @@ export function DocumentActions({
                 </DropdownMenuItem>
               </>
             )}
+
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={() => setDeleteOpen(true)}
+              className="text-red-600 focus:bg-red-50 focus:text-red-600 dark:focus:bg-red-950/30 cursor-pointer"
+            >
+              <Trash2 className="size-4 text-red-600" />
+              Hapus dokumen
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
@@ -329,6 +384,15 @@ export function DocumentActions({
         onSubmit={onDuplicate}
         busy={dupBusy}
         error={dupError}
+      />
+
+      <DeleteConfirmDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        onSubmit={onDelete}
+        busy={deleteBusy}
+        documentNumber={documentNumber}
+        employeeName={employeeName}
       />
     </>
   );
@@ -437,3 +501,87 @@ function DuplicateDialog({
     </Dialog>
   );
 }
+
+function DeleteConfirmDialog({
+  open,
+  onOpenChange,
+  onSubmit,
+  busy,
+  documentNumber,
+  employeeName,
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <div className="flex items-center gap-3">
+            <div className="flex size-10 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-950/50">
+              <Trash2 className="size-5" aria-hidden="true" />
+            </div>
+            <div>
+              <DialogTitle>Hapus Dokumen</DialogTitle>
+              <DialogDescription className="text-xs text-text-2">
+                Tindakan ini tidak dapat dibatalkan.
+              </DialogDescription>
+            </div>
+          </div>
+        </DialogHeader>
+
+        <div className="space-y-3 py-2 text-sm text-text-2">
+          <p>
+            Apakah Anda yakin ingin menghapus dokumen ini? Rekaman dokumen akan dihapus dari sistem, dan file Google Doc di Google Drive akan dipindahkan ke tempat sampah.
+          </p>
+
+          {(documentNumber || employeeName) && (
+            <div className="space-y-1.5 rounded-lg border border-border bg-surface-2 p-3 text-xs">
+              {documentNumber && (
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-text-2">Nomor Dokumen:</span>
+                  <span className="font-mono font-medium text-text-1 truncate">{documentNumber}</span>
+                </div>
+              )}
+              {employeeName && (
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-text-2">Nama Karyawan:</span>
+                  <span className="font-medium text-text-1 truncate">{employeeName}</span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <DialogFooter className="gap-2 sm:gap-0">
+          <Button
+            type="button"
+            variant="outline"
+            className="h-10"
+            onClick={() => onOpenChange(false)}
+            disabled={busy}
+          >
+            Batal
+          </Button>
+          <Button
+            type="button"
+            className="h-10 bg-red-600 text-white hover:bg-red-700 focus:ring-red-600"
+            onClick={onSubmit}
+            disabled={busy}
+            aria-busy={busy}
+          >
+            {busy ? (
+              <>
+                <Loader2 className="mr-2 size-4 animate-spin" aria-hidden="true" />
+                Menghapus...
+              </>
+            ) : (
+              <>
+                <Trash2 className="mr-2 size-4" aria-hidden="true" />
+                Hapus Dokumen
+              </>
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+

@@ -272,6 +272,8 @@ export default async function DocumentDetailPage({ params }) {
               tanggalMulai={startIso}
               jangkaBulan={log.jangka_bulan}
               unfilled={unfilled}
+              documentNumber={log.document_number}
+              employeeName={log.employee_name || employee?.nama_karyawan}
             />
           </section>
 
