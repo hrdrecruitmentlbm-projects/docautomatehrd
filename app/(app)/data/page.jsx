@@ -9,12 +9,23 @@ export default async function DataPage() {
 
   let saved = {};
   if (session?.user?.email) {
-    const { data } = await supabaseAdmin
+    // Coba ambil beserta payroll_tab, fallback jika kolom belum ada di database
+    const res = await supabaseAdmin
       .from("settings")
-      .select("master_sheet_url, master_tab, payroll_folder_url")
+      .select("master_sheet_url, master_tab, payroll_folder_url, payroll_tab")
       .eq("user_email", session.user.email)
-      .single();
-    if (data) saved = data;
+      .maybeSingle();
+
+    if (!res.error && res.data) {
+      saved = res.data;
+    } else {
+      const fallback = await supabaseAdmin
+        .from("settings")
+        .select("master_sheet_url, master_tab, payroll_folder_url")
+        .eq("user_email", session.user.email)
+        .maybeSingle();
+      if (fallback?.data) saved = fallback.data;
+    }
   }
 
   const firstRun = !saved.master_sheet_url;
@@ -64,6 +75,7 @@ export default async function DataPage() {
           initialMasterUrl={saved.master_sheet_url || ""}
           initialMasterTab={saved.master_tab || ""}
           initialPayrollFolder={saved.payroll_folder_url || ""}
+          initialPayrollTab={saved.payroll_tab || ""}
           payrollLocked={firstRun && !payrollPreset}
         />
         <CompanyMapForm />

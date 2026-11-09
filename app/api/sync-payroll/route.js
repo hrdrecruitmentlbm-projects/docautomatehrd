@@ -31,11 +31,11 @@ export async function POST(req) {
       if (!isValidGoogleId(directId)) {
         return Response.json({ error: "Link file payroll tidak valid. Tempel URL lengkap." }, { status: 400 });
       }
-      // A pasted file URL often points at a specific tab (?gid=...): honor it.
+      // Pilihan tab dari pengguna (body.tab) diutamakan. Jika tidak dipilih, gunakan gid atau tab pertama.
       const gid = extractGid(rawSheet);
       let aoa;
       let tab;
-      if (body?.tab && gid == null) {
+      if (body?.tab) {
         tab = body.tab;
         aoa = await readTabValues(session.accessToken, directId, tab);
       } else {
@@ -47,11 +47,12 @@ export async function POST(req) {
       }
       const periode = body?.periode_bulan || new Date().toISOString().slice(0, 7);
       const result = await syncPayrollAoa(aoa, periode);
-      // Save the file link too (fill once, like Template IDs).
+      // Simpan link dan tab terpilih ke settings
       const persistHint = await persistSettingsForUser(session.user.email, {
         payroll_folder_url: rawSheet,
+        payroll_tab: tab,
       });
-      return Response.json({ ...result, fileUsed: { name: `Spreadsheet langsung (${tab})` }, persistHint });
+      return Response.json({ ...result, fileUsed: { name: `Spreadsheet langsung (${tab})`, tab }, persistHint });
     }
 
     const folderId = extractFolderId(body?.folderId || body?.folderUrl);
@@ -63,12 +64,15 @@ export async function POST(req) {
       return Response.json({ error: "Tidak ada file spreadsheet di folder tersebut." }, { status: 400 });
     }
     const picked = pickNewestFile(files);
-    const { aoa, tab } = await readDriveFileAsAoa(session.accessToken, picked.file);
-    const periode = picked.periode || extractPeriode("", picked.file.modifiedTime) || new Date().toISOString().slice(0, 7);
+    const { aoa, tab } = await readDriveFileAsAoa(session.accessToken, picked.file, {
+      tabTitle: body?.tab,
+    });
+    const periode = body?.periode_bulan || picked.periode || extractPeriode("", picked.file.modifiedTime) || new Date().toISOString().slice(0, 7);
     const result = await syncPayrollAoa(aoa, periode);
 
     const persistHint = await persistSettingsForUser(session.user.email, {
       payroll_folder_url: body?.folderUrl || body?.folderId || folderId,
+      payroll_tab: tab,
     });
 
     return Response.json({

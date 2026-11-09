@@ -17,6 +17,10 @@ alter table settings add column if not exists memo_template_id text;
 alter table settings add column if not exists memo_folder_id text;
 alter table settings add column if not exists sp_template_id text;
 alter table settings add column if not exists sp_folder_id text;
+alter table settings add column if not exists master_sheet_url text;
+alter table settings add column if not exists master_tab text;
+alter table settings add column if not exists payroll_folder_url text;
+alter table settings add column if not exists payroll_tab text;
 
 -- ============================================================================
 -- 1. TABEL SUMBER SCAN FOLDER DRIVE (TAHAP 1)

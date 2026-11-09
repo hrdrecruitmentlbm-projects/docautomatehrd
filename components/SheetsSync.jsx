@@ -22,6 +22,7 @@ export function SheetsSync({
   initialMasterUrl = "",
   initialMasterTab = "",
   initialPayrollFolder = "",
+  initialPayrollTab = "",
   payrollLocked = false,
 }) {
   const [masterUrl, setMasterUrl] = useState(initialMasterUrl);
@@ -39,13 +40,15 @@ export function SheetsSync({
   const diagRef = useRef(null);
 
   const [payrollFolder, setPayrollFolder] = useState(initialPayrollFolder);
+  const [payrollTabs, setPayrollTabs] = useState(initialPayrollTab ? [{ title: initialPayrollTab, sheetId: null }] : []);
+  const [payrollTab, setPayrollTab] = useState(initialPayrollTab);
+  const [loadingPayrollTabs, setLoadingPayrollTabs] = useState(false);
   const [payrollPeriode, setPayrollPeriode] = useState(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
   });
   const [busyPayroll, setBusyPayroll] = useState(false);
   const [payrollResult, setPayrollResult] = useState(null);
-  const payrollIsFile = payrollFolder.includes("/spreadsheets/d/");
   const periodeValid = /^\d{4}-\d{2}$/.test(payrollPeriode);
 
   // Auto-open the diagnosis details when a run lands results.
@@ -216,23 +219,46 @@ export function SheetsSync({
     }
   };
 
+  const loadPayrollTabs = async () => {
+    if (!payrollFolder.trim()) return;
+    setLoadingPayrollTabs(true);
+    try {
+      const res = await fetch(`/api/sheet-tabs?spreadsheetId=${encodeURIComponent(payrollFolder.trim())}`);
+      const data = await readJson(res);
+      if (!res.ok) throw new Error(data.error || "Gagal membaca daftar tab payroll");
+      setPayrollTabs(data.tabs || []);
+      const pre = data.suggestedTab || data.tabs?.[0]?.title;
+      if (pre && !data.tabs?.some((t) => t.title === payrollTab)) setPayrollTab(pre);
+      if ((data.tabs || []).length === 0) toast.warning("Spreadsheet payroll tidak punya tab");
+      else toast.success(`Ditemukan ${(data.tabs || []).length} tab/sheet payroll`);
+    } catch (e) {
+      toast.error(e.message);
+    } finally {
+      setLoadingPayrollTabs(false);
+    }
+  };
+
   const syncPayroll = async () => {
     if (!payrollFolder.trim()) return;
-    if (payrollIsFile && !periodeValid) return;
+    if (!periodeValid) return;
     setBusyPayroll(true);
     setPayrollResult(null);
     try {
       const res = await fetch("/api/sync-payroll", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payrollIsFile
-          ? { sheetUrl: payrollFolder.trim(), periode_bulan: payrollPeriode }
-          : { folderUrl: payrollFolder.trim() }),
+        body: JSON.stringify({
+          sheetUrl: payrollFolder.trim(),
+          folderUrl: payrollFolder.trim(),
+          tab: payrollTab || undefined,
+          periode_bulan: payrollPeriode,
+        }),
       });
       const data = await readJson(res);
       if (!res.ok) throw new Error(data.error || "Gagal sinkron payroll");
       setPayrollResult(data);
-      toast.success(`${data.matched}/${data.total} payroll cocok (${data.periode_bulan})`);
+      const tabName = data.fileUsed?.tab ? ` (tab ${data.fileUsed.tab})` : "";
+      toast.success(`${data.matched}/${data.total} payroll cocok (${data.periode_bulan})${tabName}`);
       if (data.unmatched?.length > 0) toast.warning(`${data.unmatched.length} nama tidak cocok, cek ejaan`);
       if (data.persistHint) toast.warning(data.persistHint);
     } catch (e) {
@@ -393,67 +419,105 @@ export function SheetsSync({
           )}
         </div>
         <p className="mt-1 text-sm text-text-2">
-          Tempel link folder Drive (otomatis pakai file terbaru) atau link satu
-          file. Pastikan dibagikan ke email login Anda.
+          Tempel link Google Sheet payroll, pilih tab/sheet, lalu Sync. Pastikan Sheet
+          dibagikan ke email login Anda (Viewer cukup). Bisa juga link folder Drive.
         </p>
 
         <div className={`mt-4 space-y-4 ${payrollLocked ? "opacity-60" : ""}`} aria-disabled={payrollLocked || undefined}>
           <div className="space-y-1.5">
             <Label htmlFor="payroll-folder">
-              Link folder Drive payroll{" "}
-              <span className="font-normal text-text-2">atau satu file spreadsheet</span>
+              Link spreadsheet payroll{" "}
+              <span className="font-normal text-text-2">atau folder Drive</span>
             </Label>
             <Input
               id="payroll-folder"
               value={payrollFolder}
               onChange={(e) => setPayrollFolder(e.target.value)}
-              placeholder="https://drive.google.com/drive/folders/... atau .../spreadsheets/d/..."
+              placeholder="https://docs.google.com/spreadsheets/d/... atau https://drive.google.com/drive/folders/..."
               className="h-10 font-mono text-xs"
               disabled={payrollLocked}
             />
             <p className="text-xs text-text-2">
               {payrollLocked
                 ? "Sinkron master dulu, payroll dicocokkan ke nama di master."
-                : "Folder: file terbaru dipilih otomatis (nama YYYY-MM menang). File langsung: tentukan periode di bawah."}
+                : "Tempel link Google Sheet payroll lalu klik \"Muat Tab\" untuk memilih sheet yang akan dipakai. Bisa juga link folder Drive."}
             </p>
           </div>
-          {payrollIsFile && (
-            <div className="space-y-1.5">
-              <Label htmlFor="payroll-periode">Periode bulan file ini (YYYY-MM)</Label>
-              <Input
-                id="payroll-periode"
-                value={payrollPeriode}
-                onChange={(e) => setPayrollPeriode(e.target.value)}
-                placeholder="2026-09"
-                className="h-10 font-mono"
-                aria-invalid={!periodeValid || undefined}
-                aria-describedby={periodeValid ? undefined : "payroll-periode-error"}
-                disabled={payrollLocked}
-              />
-              {!periodeValid && (
-                <p id="payroll-periode-error" className="text-xs text-red-700">
-                  Periode harus format YYYY-MM, contoh 2026-09.
-                </p>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={loadPayrollTabs}
+              disabled={loadingPayrollTabs || !payrollFolder.trim() || payrollLocked}
+              className="h-10"
+            >
+              {loadingPayrollTabs ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <TableProperties className="w-4 h-4 mr-2" />
               )}
-            </div>
-          )}
-          {/* Secondary: page's single primary is Sync Master */}
-          <Button
-            variant="outline"
-            onClick={syncPayroll}
-            disabled={busyPayroll || !payrollFolder.trim() || payrollLocked || (payrollIsFile && !periodeValid)}
-            className="h-10"
-          >
-            {busyPayroll ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
-            Sync Payroll
-          </Button>
+              Muat Tab
+            </Button>
+            {payrollTabs.length > 0 && (
+              <Select value={payrollTab} onValueChange={setPayrollTab} disabled={payrollLocked}>
+                <SelectTrigger className="h-10 min-w-[180px]">
+                  <SelectValue placeholder="Pilih tab/sheet..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {payrollTabs.map((t) => (
+                    <SelectItem key={t.title} value={t.title}>
+                      {t.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="payroll-periode">
+              Periode bulan file payroll (YYYY-MM){" "}
+              <span className="font-normal text-text-2">default: bulan ini</span>
+            </Label>
+            <Input
+              id="payroll-periode"
+              value={payrollPeriode}
+              onChange={(e) => setPayrollPeriode(e.target.value)}
+              placeholder="2026-11"
+              className="h-10 font-mono"
+              aria-invalid={!periodeValid || undefined}
+              aria-describedby={periodeValid ? undefined : "payroll-periode-error"}
+              disabled={payrollLocked}
+            />
+            {!periodeValid && (
+              <p id="payroll-periode-error" className="text-xs text-red-700">
+                Periode harus format YYYY-MM, contoh 2026-11.
+              </p>
+            )}
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <Button
+              onClick={syncPayroll}
+              disabled={busyPayroll || !payrollFolder.trim() || payrollLocked || !periodeValid}
+              className="h-10 min-w-[150px]"
+            >
+              {busyPayroll ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <RefreshCw className="w-4 h-4 mr-2" />
+              )}
+              {busyPayroll ? "Sync Payroll..." : "Sync Payroll"}
+            </Button>
+          </div>
 
           {payrollResult && (
             <div className="space-y-1 rounded-md border border-border bg-surface-2 p-4 text-sm" role="status" aria-live="polite">
               <p className="font-semibold text-text-1">
-                {payrollResult.matched}/{payrollResult.total} cocok ({payrollResult.periode_bulan}).
+                {payrollResult.matched}/{payrollResult.total} payroll cocok ({payrollResult.periode_bulan})
+                {payrollResult.fileUsed?.tab ? ` (tab ${payrollResult.fileUsed.tab})` : ""}.
               </p>
-              {payrollResult.fileUsed && (
+              {payrollResult.fileUsed?.name && (
                 <p className="text-text-2">File: {payrollResult.fileUsed.name}</p>
               )}
               {payrollResult.unmatched?.length > 0 && (
