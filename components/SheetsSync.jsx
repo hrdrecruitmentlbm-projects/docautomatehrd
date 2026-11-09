@@ -2,6 +2,7 @@
 import { readJson } from "@/lib/http";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,6 +26,7 @@ export function SheetsSync({
   initialPayrollTab = "",
   payrollLocked = false,
 }) {
+  const router = useRouter();
   const [masterUrl, setMasterUrl] = useState(initialMasterUrl);
   const [tabs, setTabs] = useState(initialMasterTab ? [{ title: initialMasterTab, sheetId: null }] : []);
   const [tab, setTab] = useState(initialMasterTab);
@@ -175,6 +177,7 @@ export function SheetsSync({
       if (failed.length === 0) toast.success(`${synced} karyawan tersimpan`);
       else toast.warning(`${synced} tersimpan, ${failed.length} bagian gagal`);
       if (dupes.length > 0) toast.warning(`${dupes.length} nama ganda di Sheet (disimpan 1x)`);
+      router.refresh();
     } catch (e) {
       toast.error(e.message);
     } finally {
@@ -261,6 +264,7 @@ export function SheetsSync({
       toast.success(`${data.matched}/${data.total} payroll cocok (${data.periode_bulan})${tabName}`);
       if (data.unmatched?.length > 0) toast.warning(`${data.unmatched.length} nama tidak cocok, cek ejaan`);
       if (data.persistHint) toast.warning(data.persistHint);
+      router.refresh();
     } catch (e) {
       toast.error(e.message);
     } finally {
