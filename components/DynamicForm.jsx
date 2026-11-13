@@ -11,7 +11,29 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { FileDown, Loader2, AlertTriangle, RotateCcw, ArrowRight } from "lucide-react";
+import { FileDown, Loader2, AlertTriangle, RotateCcw, ArrowRight, Clock } from "lucide-react";
+import { addMonthsIso, formatIsoId } from "@/lib/contract-lifecycle";
+
+function getDefaultMonthsForLevel(level, settings) {
+  if (!level) return 6;
+  const str = String(level).toUpperCase();
+  if (str.includes("1")) {
+    return settings?.sp1_masa_berlaku_bulan !== undefined && settings?.sp1_masa_berlaku_bulan !== null
+      ? settings.sp1_masa_berlaku_bulan
+      : 6;
+  }
+  if (str.includes("2")) {
+    return settings?.sp2_masa_berlaku_bulan !== undefined && settings?.sp2_masa_berlaku_bulan !== null
+      ? settings.sp2_masa_berlaku_bulan
+      : 6;
+  }
+  if (str.includes("3")) {
+    return settings?.sp3_masa_berlaku_bulan !== undefined && settings?.sp3_masa_berlaku_bulan !== null
+      ? settings.sp3_masa_berlaku_bulan
+      : 6;
+  }
+  return 6;
+}
 
 /**
  * SK / Memo / SP form. 2-step (Isi data -> Buat).
@@ -20,7 +42,7 @@ import { FileDown, Loader2, AlertTriangle, RotateCcw, ArrowRight } from "lucide-
  * on failed submit, and an error summary with field links when >1 error.
  * Zero validation toasts: toasts carry async outcomes only.
  */
-export function DynamicForm({ config }) {
+export function DynamicForm({ config, spSettings }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [result, setResult] = useState(null);
   const [submitError, setSubmitError] = useState(null);
@@ -31,8 +53,12 @@ export function DynamicForm({ config }) {
     handleSubmit,
     setValue,
     reset,
+    watch,
     formState: { errors },
   } = useForm({ mode: "onBlur" });
+
+  const tanggalSp = watch("tanggal_sp");
+  const masaBerlakuBulan = watch("masa_berlaku_bulan");
 
   const fieldOrder = ["companyCode", ...config.fields.map((f) => f.key)];
 
@@ -297,9 +323,16 @@ export function DynamicForm({ config }) {
                     })}
                   />
                   <Select
-                    onValueChange={(val) =>
-                      setValue(field.key, val, { shouldValidate: true, shouldDirty: true })
-                    }
+                    onValueChange={(val) => {
+                      setValue(field.key, val, { shouldValidate: true, shouldDirty: true });
+                      if (config.id === "sp" && field.key === "tingkat_sp") {
+                        const def = getDefaultMonthsForLevel(val, spSettings);
+                        setValue("masa_berlaku_bulan", def !== null && def !== undefined ? String(def) : "", {
+                          shouldValidate: true,
+                          shouldDirty: true,
+                        });
+                      }
+                    }}
                   >
                     <SelectTrigger
                       aria-describedby={describedBy(field.key)}
@@ -317,6 +350,51 @@ export function DynamicForm({ config }) {
                     </SelectContent>
                   </Select>
                 </>
+              ) : field.key === "masa_berlaku_bulan" ? (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id={field.key}
+                      type="number"
+                      min="1"
+                      max="60"
+                      placeholder="Cth: 6 (atau klik Tanpa masa berlaku)"
+                      {...register(field.key)}
+                      className={`h-10 ${invalidBorder(field.key)}`}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setValue(field.key, "", { shouldValidate: true, shouldDirty: true });
+                      }}
+                      className="h-10 shrink-0 text-xs"
+                    >
+                      Tanpa masa berlaku
+                    </Button>
+                  </div>
+
+                  {/* Pratinjau Berlaku sampai */}
+                  <div className="rounded-md border border-border bg-surface-2 p-2.5 text-xs">
+                    <div className="flex items-center gap-2 font-medium text-text-1">
+                      <Clock className="size-3.5 text-primary shrink-0" />
+                      <span>
+                        {(() => {
+                          const num = parseInt(masaBerlakuBulan, 10);
+                          if (!masaBerlakuBulan || isNaN(num) || num <= 0) {
+                            return "Tanpa masa berlaku (berlaku seterusnya tanpa batas waktu)";
+                          }
+                          if (!tanggalSp) {
+                            return `Masa berlaku: ${num} bulan (isi Tanggal SP untuk melihat perkiraan berakhir)`;
+                          }
+                          const endIso = addMonthsIso(tanggalSp, num);
+                          return `Berlaku sampai: ${formatIsoId(endIso)} (${num} bulan)`;
+                        })()}
+                      </span>
+                    </div>
+                  </div>
+                </div>
               ) : (
                 <Input
                   id={field.key}

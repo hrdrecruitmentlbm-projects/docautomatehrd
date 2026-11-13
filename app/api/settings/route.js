@@ -11,6 +11,18 @@ export async function POST(req) {
     const data = await req.json();
     const userEmail = session.user.email;
 
+    const payload = { ...data };
+    ["sp1_masa_berlaku_bulan", "sp2_masa_berlaku_bulan", "sp3_masa_berlaku_bulan"].forEach((field) => {
+      if (field in payload) {
+        if (payload[field] === "" || payload[field] === null || payload[field] === undefined) {
+          payload[field] = null;
+        } else {
+          const num = parseInt(payload[field], 10);
+          payload[field] = isNaN(num) ? null : num;
+        }
+      }
+    });
+
     // Check if settings exist
     const { data: existingSettings } = await supabaseAdmin
       .from('settings')
@@ -23,13 +35,13 @@ export async function POST(req) {
       // Update
       result = await supabaseAdmin
         .from('settings')
-        .update({ ...data })
+        .update(payload)
         .eq('user_email', userEmail);
     } else {
       // Insert
       result = await supabaseAdmin
         .from('settings')
-        .insert({ user_email: userEmail, ...data });
+        .insert({ user_email: userEmail, ...payload });
     }
 
     if (result.error) {

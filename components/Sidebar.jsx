@@ -5,6 +5,8 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
+  CalendarClock,
+  CalendarCheck,
   FilePlus,
   ClipboardCheck,
   Database,
@@ -27,6 +29,8 @@ const NAV_GROUPS = [
     label: "Menu",
     items: [
       { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard", match: ["/dashboard"] },
+      { href: "/jatuh-tempo", icon: CalendarClock, label: "Jatuh Tempo", match: ["/jatuh-tempo"] },
+      { href: "/rekap-perpanjangan", icon: CalendarCheck, label: "Rekap Perpanjangan", match: ["/rekap-perpanjangan"] },
       { href: "/input-dokumen", icon: FilePlus, label: "Documents", match: ["/input-dokumen", "/generate"] },
       { href: "/kontrak", icon: ClipboardCheck, label: "Kontrak", match: ["/kontrak"] },
       { href: "/data", icon: Database, label: "Data Karyawan", match: ["/data"] },

@@ -1,6 +1,8 @@
 import { auth } from "@/auth";
 import { supabaseAdmin } from "@/lib/supabase";
 import { getUnifiedContracts } from "@/lib/pkwt-unified";
+import { getDueEmployees } from "@/lib/jatuh-tempo";
+import { JatuhTempoDashboardSection } from "@/components/JatuhTempoDashboardSection";
 import { DashboardRevamp } from "@/components/DashboardRevamp";
 
 export const dynamic = "force-dynamic";
@@ -53,6 +55,22 @@ export default async function DashboardPage({ searchParams }) {
 
   const contracts = unifiedResult?.data || [];
   const counts = unifiedResult?.counts || {};
+
+  // 1b. Ambil data jatuh tempo karyawan untuk blok atas dashboard
+  let dueData = {
+    groups: [],
+    lewat: [],
+    hari7: [],
+    hari30: [],
+    bulanIni: [],
+    bulanDepan: [],
+    perluDilengkapi: [],
+  };
+  try {
+    dueData = await getDueEmployees({ now });
+  } catch (err) {
+    console.error("Dashboard getDueEmployees error:", err);
+  }
 
   // 2. Ambil data pendukung master karyawan & payroll (gelombang paralel)
   let employeesTotal = 0;
@@ -177,38 +195,41 @@ export default async function DashboardPage({ searchParams }) {
   ].sort();
 
   return (
-    <DashboardRevamp
-      now={now.getTime()}
-      kpis={{
-        aktif: counts.aktif || 0,
-        expiring30: counts.expiring30 || 0,
-        expiring60: counts.expiring60 || 0,
-        expiring90: counts.expiring90 || 0,
-        expired: counts.kedaluwarsa || 0,
-        monthTotal: counts.createdThisMonth || 0,
-        monthMine,
-        perluDicek: counts.perluDicek || 0,
-        total: counts.total || 0,
-        aplikasi: counts.aplikasi || 0,
-        drive: counts.drive || 0,
-        missingPayroll,
-        employees: employeesTotal,
-      }}
-      byCompany={byCompany}
-      trend={trend}
-      byStatus={byStatus}
-      byDuration={byDuration}
-      expiringContracts={expiringContracts}
-      recent={recentDocs}
-      companyOptions={companyOptions}
-      activeFilters={{
-        periode: filterPeriode || "",
-        perusahaan: filterPerusahaan || "",
-        status: filterStatus || "",
-        sumber: filterSumber || "",
-        search: filterSearch || "",
-        perlu_dicek: filterPerluCek,
-      }}
-    />
+    <div className="space-y-8">
+      <JatuhTempoDashboardSection dueData={dueData} now={now.getTime()} />
+      <DashboardRevamp
+        now={now.getTime()}
+        kpis={{
+          aktif: counts.aktif || 0,
+          expiring30: counts.expiring30 || 0,
+          expiring60: counts.expiring60 || 0,
+          expiring90: counts.expiring90 || 0,
+          expired: counts.kedaluwarsa || 0,
+          monthTotal: counts.createdThisMonth || 0,
+          monthMine,
+          perluDicek: counts.perluDicek || 0,
+          total: counts.total || 0,
+          aplikasi: counts.aplikasi || 0,
+          drive: counts.drive || 0,
+          missingPayroll,
+          employees: employeesTotal,
+        }}
+        byCompany={byCompany}
+        trend={trend}
+        byStatus={byStatus}
+        byDuration={byDuration}
+        expiringContracts={expiringContracts}
+        recent={recentDocs}
+        companyOptions={companyOptions}
+        activeFilters={{
+          periode: filterPeriode || "",
+          perusahaan: filterPerusahaan || "",
+          status: filterStatus || "",
+          sumber: filterSumber || "",
+          search: filterSearch || "",
+          perlu_dicek: filterPerluCek,
+        }}
+      />
+    </div>
   );
 }

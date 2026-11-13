@@ -6,6 +6,7 @@ import { generateDocumentNumber } from "@/lib/auto-numbering";
 import { generatePkwt } from "@/lib/generate-pkwt";
 import { generatePaklaring } from "@/lib/generate-paklaring";
 import { buildDocumentFileName } from "@/lib/file-name";
+import { addMonthsIso, toIsoDate, formatIsoId } from "@/lib/contract-lifecycle";
 import { revalidatePath } from "next/cache";
 
 // WAJIB: rantai ini memanggil Google Docs API beberapa kali — copy template,
@@ -120,6 +121,27 @@ export async function POST(req) {
       replacements.tanggal_selesai = endDate.toLocaleDateString('id-ID', options);
     }
 
+    // SP: Hitung masa berlaku kondisional jika ada
+    let spTanggalMulai = null;
+    let spTanggalBerakhir = null;
+    let spMasaBerlakuBulan = null;
+
+    if (documentType === 'sp') {
+      const tglSp = formData.tanggal_sp ? toIsoDate(formData.tanggal_sp) : null;
+      const masaBulan = formData.masa_berlaku_bulan ? parseInt(formData.masa_berlaku_bulan, 10) : null;
+
+      if (tglSp) {
+        spTanggalMulai = tglSp;
+        if (masaBulan && !isNaN(masaBulan) && masaBulan > 0) {
+          spMasaBerlakuBulan = masaBulan;
+          spTanggalBerakhir = addMonthsIso(tglSp, masaBulan);
+          replacements.tanggal_berlaku_sampai = formatIsoId(spTanggalBerakhir);
+        } else {
+          replacements.tanggal_berlaku_sampai = '-';
+        }
+      }
+    }
+
     // Format current date
     const today = new Date();
     replacements.tanggal_surat = today.toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' });
@@ -134,7 +156,7 @@ export async function POST(req) {
     const docUrl = buildDocUrl(docId);
 
     // 5. Log to Supabase
-    const { error: logError } = await supabase
+    const { error: logError } = await supabaseAdmin
       .from('document_logs')
       .insert({
         user_email: session.user.email,
@@ -145,11 +167,23 @@ export async function POST(req) {
         employee_name: formData.nama_karyawan || formData.kepada || null,
         google_doc_id: docId,
         google_doc_url: docUrl,
-        form_data: formData
+        form_data: formData,
+        tanggal_mulai: spTanggalMulai,
+        tanggal_berakhir: spTanggalBerakhir,
+        masa_berlaku_bulan: spMasaBerlakuBulan,
       });
 
     if (logError) {
       console.error("Failed to log document generation:", logError);
+    }
+
+    try {
+      revalidatePath('/dashboard');
+      revalidatePath('/jatuh-tempo');
+      revalidatePath('/history');
+      revalidatePath('/', 'layout');
+    } catch (e) {
+      console.warn("revalidatePath warning:", e?.message);
     }
 
     return Response.json({ success: true, docUrl, docId, documentNumber });

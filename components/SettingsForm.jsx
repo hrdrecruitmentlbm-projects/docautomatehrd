@@ -26,7 +26,24 @@ const DOT_COLORS = Object.fromEntries(
 export function SettingsForm({ initialSettings = {} }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [savedAt, setSavedAt] = useState(null);
-  const { register, handleSubmit, formState: { isDirty } } = useForm({ defaultValues: initialSettings });
+
+  const defaultValues = {
+    ...initialSettings,
+    sp1_masa_berlaku_bulan:
+      initialSettings.sp1_masa_berlaku_bulan === null
+        ? ""
+        : initialSettings.sp1_masa_berlaku_bulan ?? 6,
+    sp2_masa_berlaku_bulan:
+      initialSettings.sp2_masa_berlaku_bulan === null
+        ? ""
+        : initialSettings.sp2_masa_berlaku_bulan ?? 6,
+    sp3_masa_berlaku_bulan:
+      initialSettings.sp3_masa_berlaku_bulan === null
+        ? ""
+        : initialSettings.sp3_masa_berlaku_bulan ?? 6,
+  };
+
+  const { register, handleSubmit, formState: { isDirty } } = useForm({ defaultValues });
 
   const onSubmit = async (data) => {
     setIsSubmitting(true);
@@ -69,6 +86,54 @@ export function SettingsForm({ initialSettings = {} }) {
           <div className="space-y-1.5">
             <Label htmlFor="signatory_title">Jabatan Penandatangan (Default)</Label>
             <Input id="signatory_title" {...register('signatory_title')} placeholder="Cth: HR Manager" className="h-10" />
+          </div>
+        </div>
+      </section>
+
+      {/* Section: Masa Berlaku SP */}
+      <section aria-labelledby="settings-sp" className="border-t border-border p-5 sm:p-6">
+        <h2 id="settings-sp" className="text-[15px] font-semibold text-text-1">
+          Masa Berlaku Default Surat Peringatan (SP)
+        </h2>
+        <p className="mt-1 text-sm text-text-2">
+          Atur masa berlaku default (dalam bulan) untuk setiap tingkat SP. Nilai awal adalah 6 bulan; kosongkan jika tanpa masa berlaku.
+        </p>
+        <div className="mt-4 grid grid-cols-1 gap-6 sm:grid-cols-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="sp1_masa_berlaku_bulan">SP 1 (Bulan)</Label>
+            <Input
+              id="sp1_masa_berlaku_bulan"
+              type="number"
+              min="1"
+              max="60"
+              {...register('sp1_masa_berlaku_bulan')}
+              placeholder="Default: 6 (kosong = tanpa masa berlaku)"
+              className="h-10"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="sp2_masa_berlaku_bulan">SP 2 (Bulan)</Label>
+            <Input
+              id="sp2_masa_berlaku_bulan"
+              type="number"
+              min="1"
+              max="60"
+              {...register('sp2_masa_berlaku_bulan')}
+              placeholder="Default: 6 (kosong = tanpa masa berlaku)"
+              className="h-10"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="sp3_masa_berlaku_bulan">SP 3 (Bulan)</Label>
+            <Input
+              id="sp3_masa_berlaku_bulan"
+              type="number"
+              min="1"
+              max="60"
+              {...register('sp3_masa_berlaku_bulan')}
+              placeholder="Default: 6 (kosong = tanpa masa berlaku)"
+              className="h-10"
+            />
           </div>
         </div>
       </section>

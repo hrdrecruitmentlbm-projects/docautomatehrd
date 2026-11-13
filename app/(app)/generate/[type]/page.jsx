@@ -1,3 +1,5 @@
+import { auth } from "@/auth";
+import { supabaseAdmin } from "@/lib/supabase";
 import { getDocumentConfig } from "@/lib/document-configs";
 import { DynamicForm } from "@/components/DynamicForm";
 import { PkwtAutoForm } from "@/components/PkwtAutoForm";
@@ -32,6 +34,31 @@ export default async function GenerateDocumentPage({ params }) {
 
   const auto = AUTO_FORMS[type];
 
+  let spSettings = null;
+  if (type === 'sp') {
+    try {
+      const session = await auth();
+      if (session?.user?.email) {
+        const { data } = await supabaseAdmin
+          .from('settings')
+          .select('sp1_masa_berlaku_bulan, sp2_masa_berlaku_bulan, sp3_masa_berlaku_bulan')
+          .eq('user_email', session.user.email)
+          .maybeSingle();
+        spSettings = data;
+      }
+      if (!spSettings) {
+        const { data } = await supabaseAdmin
+          .from('settings')
+          .select('sp1_masa_berlaku_bulan, sp2_masa_berlaku_bulan, sp3_masa_berlaku_bulan')
+          .limit(1)
+          .maybeSingle();
+        spSettings = data;
+      }
+    } catch (e) {
+      console.error("Gagal mengambil settings SP:", e);
+    }
+  }
+
   return (
     <div className="max-w-4xl mx-auto">
       <p className="mb-6 text-sm text-text-2">
@@ -39,7 +66,7 @@ export default async function GenerateDocumentPage({ params }) {
       </p>
 
       <Suspense fallback={<div className="py-12 text-center text-sm text-text-2">Memuat form...</div>}>
-        {auto ? <auto.Form /> : <DynamicForm config={config} />}
+        {auto ? <auto.Form /> : <DynamicForm config={config} spSettings={spSettings} />}
       </Suspense>
     </div>
   );

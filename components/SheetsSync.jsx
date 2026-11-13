@@ -8,7 +8,24 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { CheckCircle2, Loader2, RefreshCw, Stethoscope, TableProperties, XCircle, RotateCcw } from "lucide-react";
+import { CheckCircle2, Loader2, RefreshCw, Stethoscope, TableProperties, XCircle, RotateCcw, AlertTriangle } from "lucide-react";
+
+function formatSyncTime(isoString) {
+  if (!isoString) return null;
+  const d = new Date(isoString);
+  if (isNaN(d)) return null;
+  return (
+    new Intl.DateTimeFormat("id-ID", {
+      timeZone: "Asia/Jakarta",
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(d) + " WIB"
+  );
+}
 
 /**
  * Data page sections 1 (Master) and 2 (Payroll), hairline sections inside
@@ -24,10 +41,12 @@ export function SheetsSync({
   initialMasterTab = "",
   initialPayrollFolder = "",
   initialPayrollTab = "",
+  initialLastMasterSync = null,
   payrollLocked = false,
 }) {
   const router = useRouter();
   const [masterUrl, setMasterUrl] = useState(initialMasterUrl);
+  const [lastMasterSync, setLastMasterSync] = useState(initialLastMasterSync);
   const [tabs, setTabs] = useState(initialMasterTab ? [{ title: initialMasterTab, sheetId: null }] : []);
   const [tab, setTab] = useState(initialMasterTab);
   const [loadingTabs, setLoadingTabs] = useState(false);
@@ -139,6 +158,8 @@ export function SheetsSync({
       let consumed = 0;
       const failed = [];
       const dupes = [];
+      const needingExpiry = [];
+      let syncWarning = null;
       const liniSet = new Set();
       const total = probe.totalRows || 0;
       // 2. Sync 40 rows at a time; a broken chunk is skipped, not fatal
@@ -154,6 +175,10 @@ export function SheetsSync({
           });
           synced += r.synced || 0;
           for (const d of r.duplicates || []) if (!dupes.includes(d)) dupes.push(d);
+          for (const p of r.perluDilengkapi || []) {
+            if (!needingExpiry.some((x) => x.nama === p.nama)) needingExpiry.push(p);
+          }
+          if (r.warning && !syncWarning) syncWarning = r.warning;
           for (const lb of r.liniBisnis || []) liniSet.add(lb);
         } catch (e) {
           failed.push({ start, end: start + CHUNK - 1, message: e.message || String(e) });
@@ -165,18 +190,30 @@ export function SheetsSync({
         if (failed.length > 5) break;
       }
       // 3. Save links once (like Template IDs) so next visit is pre-filled.
+      let lastSync = new Date().toISOString();
       try {
         const s = await post({ sheetUrl: masterUrl.trim(), tab: probe.tab, saveOnly: true });
         if (s.persistHint) toast.warning(s.persistHint);
+        if (s.lastSyncAt) lastSync = s.lastSyncAt;
       } catch {
         // Non-fatal: sync already succeeded.
       }
-      setMasterResult({ total: synced, tab: probe.tab, duplicates: dupes, distinctLiniBisnis: [...liniSet].sort() });
+      setLastMasterSync(lastSync);
+      setMasterResult({
+        total: synced,
+        tab: probe.tab,
+        duplicates: dupes,
+        perluDilengkapi: needingExpiry,
+        distinctLiniBisnis: [...liniSet].sort(),
+        warning: syncWarning,
+        lastSyncAt: lastSync,
+      });
       setFailedRanges(failed);
       // Toast = short outcome only; the result box carries the detail.
       if (failed.length === 0) toast.success(`${synced} karyawan tersimpan`);
       else toast.warning(`${synced} tersimpan, ${failed.length} bagian gagal`);
       if (dupes.length > 0) toast.warning(`${dupes.length} nama ganda di Sheet (disimpan 1x)`);
+      if (needingExpiry.length > 0) toast.warning(`${needingExpiry.length} karyawan PKWT/Freelance/Training belum ada tanggal habis kontrak`);
       router.refresh();
     } catch (e) {
       toast.error(e.message);
@@ -193,6 +230,7 @@ export function SheetsSync({
     try {
       let recovered = 0;
       const stillFailed = [];
+      const recoveredNeeding = [];
       for (const range of failedRanges) {
         try {
           const res = await fetch("/api/sync-master", {
@@ -209,12 +247,22 @@ export function SheetsSync({
           const data = await res.json().catch(() => ({}));
           if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
           recovered += data.synced || 0;
+          for (const p of data.perluDilengkapi || []) {
+            if (!recoveredNeeding.some((x) => x.nama === p.nama)) recoveredNeeding.push(p);
+          }
         } catch (e) {
           stillFailed.push({ ...range, message: e.message || String(e) });
         }
       }
       setFailedRanges(stillFailed);
-      setMasterResult((prev) => (prev ? { ...prev, total: prev.total + recovered } : prev));
+      setMasterResult((prev) => {
+        if (!prev) return prev;
+        const mergedNeeding = [...(prev.perluDilengkapi || [])];
+        for (const p of recoveredNeeding) {
+          if (!mergedNeeding.some((x) => x.nama === p.nama)) mergedNeeding.push(p);
+        }
+        return { ...prev, total: prev.total + recovered, perluDilengkapi: mergedNeeding };
+      });
       if (stillFailed.length === 0) toast.success(`Bagian gagal tersimpan (+${recovered})`);
       else toast.error(`${stillFailed.length} bagian masih gagal`);
     } finally {
@@ -276,9 +324,16 @@ export function SheetsSync({
     <>
       {/* Section 1: Master */}
       <section aria-labelledby="master-heading" className="p-5 sm:p-6">
-        <h2 id="master-heading" className="text-[15px] font-semibold text-text-1">
-          Database Master Karyawan
-        </h2>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 id="master-heading" className="text-[15px] font-semibold text-text-1">
+            Database Master Karyawan
+          </h2>
+          {lastMasterSync && (
+            <span className="text-xs text-text-2">
+              Sinkron terakhir: {formatSyncTime(lastMasterSync)}
+            </span>
+          )}
+        </div>
         <p className="mt-1 text-sm text-text-2">
           Tempel link Google Sheet master, pilih tab, lalu Sync. Pastikan Sheet
           dibagikan ke email login Anda (Viewer cukup).
@@ -374,19 +429,61 @@ export function SheetsSync({
           )}
 
           {masterResult && (
-            <div className="space-y-1 rounded-md border border-border bg-surface-2 p-4 text-sm" role="status" aria-live="polite">
-              <p className="font-semibold text-text-1">
-                {masterResult.total} karyawan tersimpan (tab {masterResult.tab}).
-              </p>
+            <div className="space-y-3 rounded-md border border-border bg-surface-2 p-4 text-sm" role="status" aria-live="polite">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-2">
+                <p className="font-semibold text-text-1">
+                  {masterResult.total} karyawan tersimpan (tab {masterResult.tab}).
+                </p>
+                {masterResult.lastSyncAt && (
+                  <span className="text-xs text-text-2">
+                    Sinkron: {formatSyncTime(masterResult.lastSyncAt)}
+                  </span>
+                )}
+              </div>
+
               <p className="text-text-2">
                 Lini bisnis: {masterResult.distinctLiniBisnis?.join(", ") || "-"}
               </p>
+
+              {masterResult.warning && (
+                <div className="rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800">
+                  {masterResult.warning}
+                </div>
+              )}
+
+              {masterResult.perluDilengkapi?.length > 0 && (
+                <div className="rounded-md border border-amber-300 bg-amber-50/80 p-3 text-xs text-amber-900">
+                  <div className="flex items-start gap-1.5 font-medium text-amber-900">
+                    <AlertTriangle className="size-4 shrink-0 text-amber-600 mt-0.5" />
+                    <span>
+                      {masterResult.perluDilengkapi.length} karyawan berstatus PKWT/FREELANCE/TRAINING belum memiliki tanggal habis kontrak di Sheet (perlu dilengkapi):
+                    </span>
+                  </div>
+                  <details className="mt-2 group">
+                    <summary className="cursor-pointer font-medium text-amber-800 hover:text-amber-950 underline underline-offset-2">
+                      Lihat daftar nama ({masterResult.perluDilengkapi.length} orang)
+                    </summary>
+                    <div className="mt-2 max-h-48 overflow-y-auto rounded border border-amber-200 bg-white/70 p-2 space-y-1">
+                      {masterResult.perluDilengkapi.map((emp, i) => (
+                        <div key={i} className="flex items-center justify-between text-[11px] border-b border-amber-100 last:border-b-0 py-0.5">
+                          <span className="font-mono font-medium text-slate-800">{emp.nama}</span>
+                          <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-800 font-semibold uppercase">
+                            {emp.status}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                </div>
+              )}
+
               {masterResult.duplicates?.length > 0 && (
                 <p className="text-amber-700">
                   Nama ganda di Sheet (tersimpan 1x): {masterResult.duplicates.slice(0, 10).join("; ")}
                   {masterResult.duplicates.length > 10 ? ` (+${masterResult.duplicates.length - 10} lagi)` : ""}
                 </p>
               )}
+
               {failedRanges.length > 0 && (
                 <div className="pt-2">
                   <p className="text-amber-700">

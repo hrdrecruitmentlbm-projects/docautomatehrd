@@ -1,7 +1,7 @@
 import { auth } from "@/auth";
 import { supabase, supabaseAdmin } from "@/lib/supabase";
 import { generatePkwt } from "@/lib/generate-pkwt";
-import { addMonthsIso, toIsoDate } from "@/lib/contract-lifecycle";
+import { addMonthsIso, addDaysIso, toIsoDate, getTodayWib } from "@/lib/contract-lifecycle";
 
 /**
  * POST /api/documents/duplicate — "Buat Salinan".
@@ -28,52 +28,64 @@ export async function POST(req) {
     }
 
     const body = await req.json();
-    const sourceId = String(body?.id || "").trim();
-    if (!sourceId) {
-      return Response.json({ error: "id dokumen sumber wajib diisi" }, { status: 400 });
+    let sourceId = String(body?.id || "").trim();
+    if (sourceId.startsWith("app_")) sourceId = sourceId.replace(/^app_/, "");
+    if (sourceId.startsWith("drive_")) sourceId = sourceId.replace(/^drive_/, "");
+
+    let source = null;
+    if (sourceId) {
+      const { data: foundSource } = await supabaseAdmin
+        .from("document_logs")
+        .select("id,document_type,employee_nama_key,employee_name,tanggal_mulai,tanggal_berakhir,jangka_bulan,form_data")
+        .eq("id", sourceId)
+        .maybeSingle();
+      source = foundSource;
     }
 
-    const { data: source, error: sourceError } = await supabaseAdmin
-      .from("document_logs")
-      .select("id,document_type,employee_nama_key,employee_name,tanggal_mulai,tanggal_berakhir,jangka_bulan,form_data")
-      .eq("id", sourceId)
-      .maybeSingle();
+    const employeeKey =
+      String(body?.employee_nama_key || body?.employeeKey || "").trim() ||
+      source?.employee_nama_key ||
+      source?.form_data?.employee_nama_key;
 
-    if (sourceError) {
-      return Response.json({ error: sourceError.message }, { status: 500 });
+    if (!employeeKey) {
+      return Response.json(
+        { error: "Data karyawan tidak ditemukan untuk membuat perpanjangan dokumen." },
+        { status: 400 }
+      );
     }
-    if (!source) {
-      return Response.json({ error: "Dokumen sumber tidak ditemukan" }, { status: 404 });
+
+    if (!source && employeeKey) {
+      const { data: latestLog } = await supabaseAdmin
+        .from("document_logs")
+        .select("id,document_type,employee_nama_key,employee_name,tanggal_mulai,tanggal_berakhir,jangka_bulan,form_data")
+        .eq("document_type", "pkwt")
+        .eq("employee_nama_key", employeeKey)
+        .order("tanggal_berakhir", { ascending: false, nullsFirst: false })
+        .limit(1)
+        .maybeSingle();
+      if (latestLog) source = latestLog;
     }
-    if (source.document_type !== "pkwt") {
+
+    if (source && source.document_type !== "pkwt") {
       return Response.json(
         { error: "Buat Salinan baru tersedia untuk PKWT. Dokumen lain belum didukung." },
         { status: 400 }
       );
     }
 
-    const employeeKey = source.employee_nama_key || source.form_data?.employee_nama_key;
-    if (!employeeKey) {
-      return Response.json(
-        { error: "Dokumen sumber ini tidak punya data karyawan, jadi tidak bisa disalin." },
-        { status: 400 }
-      );
-    }
+    // Tanggal mulai: pakai yang dikirim, atau H+1 tanggal berakhir lama, atau tanggal mulai lama
+    const calculatedStart = source?.tanggal_berakhir
+      ? addDaysIso(source.tanggal_berakhir, 1)
+      : null;
 
-    // Tanggal: pakai yang dikirim, atau hitung ulang dari tanggal_mulai lama
-    // + jangka waktu lama. Menyalin masa kontrak yang sudah lewat tanpa
-    // diminta akan membuat dokumen kedaluwarsa seketika.
     const start =
-      toIsoDate(body?.tanggal_mulai) || toIsoDate(source.tanggal_mulai) || null;
-    if (!start) {
-      return Response.json(
-        { error: "Tanggal mulai kontrak sumber tidak ditemukan. Isi tanggal mulai secara manual." },
-        { status: 400 }
-      );
-    }
+      toIsoDate(body?.tanggal_mulai) ||
+      calculatedStart ||
+      toIsoDate(source?.tanggal_mulai) ||
+      getTodayWib();
 
     const months =
-      parseInt(body?.jangka_bulan || source.jangka_bulan || 0, 10) || 0;
+      parseInt(body?.jangka_bulan || source?.jangka_bulan || 12, 10) || 12;
     const end =
       toIsoDate(body?.tanggal_berakhir) ||
       (months > 0 ? addMonthsIso(start, months) : null);
@@ -93,7 +105,8 @@ export async function POST(req) {
         tanggal_berakhir: end || "",
         jangka_bulan: months,
         periode_kontrak: months > 0 ? `${months} Bulan` : "",
-        tanggal_ttd: toIsoDate(body?.tanggal_ttd) || new Date().toISOString().slice(0, 10),
+        tanggal_ttd: toIsoDate(body?.tanggal_ttd) || getTodayWib(),
+        perpanjangan_dari: source?.id || null,
       },
     });
 

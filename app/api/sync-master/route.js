@@ -10,7 +10,7 @@ import {
   readTabValues,
 } from "@/lib/sheets";
 import { mapMasterRows } from "@/lib/spreadsheet";
-import { syncMasterAoa, upsertEmployees, findMasterHeaderIndex, findDuplicateNames, persistSettingsForUser } from "@/lib/sync";
+import { syncMasterAoa, upsertEmployees, findMasterHeaderIndex, findDuplicateNames, findEmployeesNeedingExpiry, persistSettingsForUser } from "@/lib/sync";
 
 const CHUNK_ROWS = 40;
 
@@ -19,7 +19,7 @@ export const maxDuration = 60;
 
 // POST /api/sync-master — three modes (chunked sync keeps big tabs fast):
 // { sheetUrl, tab?, probe: true }            -> { tab, headerRow, headerIndex, totalRows }
-// { sheetUrl, tab, headers, startRow, endRow } -> { synced } (one 40-row chunk)
+// { sheetUrl, tab, headers, startRow, endRow } -> { synced, duplicates, liniBisnis, perluDilengkapi, warning } (one 40-row chunk)
 // { sheetUrl, tab }                            -> legacy full sync
 export async function POST(req) {
   const session = await auth();
@@ -35,14 +35,16 @@ export async function POST(req) {
   try {
     // ---- Save links only (fill once, like Template IDs): { sheetUrl, tab, saveOnly: true }
     if (body?.saveOnly) {
+      const nowIso = new Date().toISOString();
       const persistHint = await persistSettingsForUser(session.user.email, {
         master_sheet_url: body?.sheetUrl || body?.spreadsheetId || spreadsheetId,
         master_tab: body?.tab || null,
+        last_master_sync_at: nowIso,
       });
       // Sapu bersih sisa baris footer lama ("TOTAL") yang sempat tersimpan
       // sebagai pegawai (cascade menghapus payroll-nya juga).
       await supabaseAdmin.from("employees").delete().in("nama_key", ["total", "jumlah", "subtotal", "grand total"]);
-      return Response.json({ saved: true, persistHint });
+      return Response.json({ saved: true, persistHint, lastSyncAt: nowIso });
     }
 
     // ---- Probe: tiny reads only (header block + first column for row count)
@@ -80,12 +82,17 @@ export async function POST(req) {
         session.accessToken, spreadsheetId, `${quoteTab(tab)}!A${startRow}:AZ${endRow}`
       );
       const nonEmpty = rows.filter((r) => r.some((c) => String(c ?? "").trim() !== ""));
-      if (nonEmpty.length === 0) return Response.json({ synced: 0, duplicates: [] });
+      if (nonEmpty.length === 0) return Response.json({ synced: 0, duplicates: [], perluDilengkapi: [] });
       const { employees } = mapMasterRows(body.headers, nonEmpty);
       const duplicates = findDuplicateNames(employees);
+      const perluDilengkapi = findEmployeesNeedingExpiry(employees);
       const liniBisnis = [...new Set(employees.map((e) => e.lini_bisnis).filter(Boolean))].sort();
-      if (employees.length > 0) await upsertEmployees(employees);
-      return Response.json({ synced: employees.length, duplicates, liniBisnis });
+      let warning = null;
+      if (employees.length > 0) {
+        const res = await upsertEmployees(employees);
+        warning = res?.warning || null;
+      }
+      return Response.json({ synced: employees.length, duplicates, liniBisnis, perluDilengkapi, warning });
     }
 
     // ---- Legacy full sync (small sheets)
@@ -100,13 +107,15 @@ export async function POST(req) {
     }
     const aoa = await readTabValues(session.accessToken, spreadsheetId, tab);
     const result = await syncMasterAoa(aoa, tab);
+    const nowIso = new Date().toISOString();
 
     after(() => persistSettingsForUser(session.user.email, {
       master_sheet_url: body?.sheetUrl || body?.spreadsheetId || spreadsheetId,
       master_tab: tab,
+      last_master_sync_at: nowIso,
     }));
 
-    return Response.json({ ...result, tabs, tab });
+    return Response.json({ ...result, tabs, tab, lastSyncAt: nowIso });
   } catch (e) {
     return Response.json({ error: e.message }, { status: 400 });
   }
