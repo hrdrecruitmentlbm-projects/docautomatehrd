@@ -339,5 +339,122 @@ assert(
   "6f-2. Kontrak perpanjangan tercatat di rekap perpanjangan bulan yang benar (November 2026)"
 );
 
-console.log("\n🎉 SEMUA PENGUJIAN LOGIKA & KRITERIA 6a-6f BERHASIL 100%!");
+// === PENGECEKAN REVISI BAGIAN 1 & 3 (TAMPILAN BULANAN BERBASIS KOLOM J) ===
+console.log("\n--- VERIFIKASI REVISI BAGIAN 1 & 3 ---");
+
+import { mapMasterRows } from "../lib/spreadsheet.js";
+import { toIsoDate } from "../lib/contract-lifecycle.js";
+
+// Uji parsing kolom J via teks header "TANGGAL HABIS KONTRAK" (abaikan kolom K "Sisa Kontrak")
+const sheetHeaders = [
+  "NO", "NAMA", "NIK", "JK", "POSISI", "DIVISI", "LINI BISNIS",
+  "TANGGAL MASUK", "STATUS KARYAWAN", "TANGGAL HABIS KONTRAK", "Sisa Kontrak Hitungan Hari",
+];
+const sheetRows = [
+  ["1", "Akhmad Umar M", "004", "L", "IT Support", "IT", "NUMETA", "2025-11-01", "PKWT", "1 November 2026", "-8"],
+  ["2", "Dimas Putra Ariyanto", "008", "L", "Staff OPS", "OPS", "NUMETA", "2025-11-17", "PKWT", "17 November 2026", "8"],
+  ["3", "Dimas Sugiono", "010", "L", "Operator", "OPS", "LBM", "2025-11-26", "PKWT", "26/11/2026", "17"],
+  ["4", "Ali Usman", "011", "L", "Driver", "GA", "LBM", "2026-05-28", "FREELANCE", "2026-11-28", "19"],
+  ["5", "Karyawan Tetap", "012", "P", "Finance", "FIN", "LBM", "2020-01-01", "PKWTT", "2026-11-30", "-46335"],
+  ["6", "Karyawan Kotor", "013", "L", "Helper", "OPS", "LBM", "2026-01-01", "PKWT", "-", "-46335"],
+  ["7", "Karyawan Nol", "014", "L", "Helper", "OPS", "LBM", "2026-01-01", "PKWT", "0", "-46335"],
+];
+
+const mapped = mapMasterRows(sheetHeaders, sheetRows);
+assert(
+  mapped.colIndex.tanggalHabisKontrak === 9,
+  "Rev-1a. Header 'TANGGAL HABIS KONTRAK' terdeteksi di indeks 9 (kolom J), bukan kolom K"
+);
+assert(toIsoDate("-") === null && toIsoDate("0") === null && toIsoDate("-46335") === null && toIsoDate("12") === null, "Rev-1b. Nilai kosong / '-' / '0' / '-46335' / angka polos menghasilkan NULL");
+
+const novContracts = [
+  // Dimas Sugiono sudah diperpanjang
+  {
+    id: "doc-dimas-sugiono-1",
+    nama_key: "dimas sugiono",
+    nama_asli: "Dimas Sugiono",
+    tanggal_mulai: "2025-11-26",
+    tanggal_berakhir: "2026-11-26",
+  },
+  {
+    id: "doc-dimas-sugiono-2",
+    nama_key: "dimas sugiono",
+    nama_asli: "Dimas Sugiono",
+    nomor_surat: "0099/PKWT/HRD-LBM/XI/2026",
+    tanggal_mulai: "2026-11-27",
+    tanggal_berakhir: "2027-05-26",
+    url: "https://docs.google.com/document/d/demo-dimas/edit",
+  },
+];
+
+// Mode halaman /jatuh-tempo (includeRenewed: true)
+const monthlyResult = processDueEmployees(mapped.employees, novContracts, {
+  now: NOW_TEST,
+  includeRenewed: true,
+});
+
+const novGroup = monthlyResult.groups.find((g) => g.bulan === "2026-11");
+assert(Boolean(novGroup), "Rev-2a. Grup bulan 2026-11 tersedia");
+assert(
+  novGroup.items.length === 4,
+  `Rev-2b. Bulan 2026-11 menampilkan tepat 4 karyawan kontrak (didapat: ${novGroup.items.length})`
+);
+for (const expectedName of ["Akhmad Umar M", "Dimas Putra Ariyanto", "Dimas Sugiono", "Ali Usman"]) {
+  assert(
+    novGroup.items.some((i) => i.nama_asli === expectedName),
+    `Rev-2c. '${expectedName}' muncul pada daftar bulan 2026-11`
+  );
+}
+
+const sugionoItem = novGroup.items.find((i) => i.nama_asli === "Dimas Sugiono");
+assert(
+  Boolean(sugionoItem && sugionoItem.sudah_diperpanjang === true && sugionoItem.tanggal_berakhir_baru === "2027-05-26"),
+  "Rev-2d. Dimas Sugiono tidak disembunyikan, berstatus 'Sudah diperpanjang', dan menyertakan tanggal berakhir baru (2027-05-26)"
+);
+
+const aliItem = novGroup.items.find((i) => i.nama_asli === "Ali Usman");
+assert(
+  Boolean(aliItem && aliItem.sudah_diperpanjang === false && aliItem.sisa_hari === 19),
+  "Rev-2e. Ali Usman (FREELANCE) muncul di 2026-11 dengan status 'Belum diperpanjang' (19 hari)"
+);
+
+assert(
+  novGroup.total === 4 && novGroup.sudahDiperpanjang === 1 && novGroup.belumDiperpanjang === 3,
+  "Rev-3. Ringkasan bulan 2026-11 akurat: total 4, sudah diperpanjang 1, belum diperpanjang 3"
+);
+
+assert(
+  monthlyResult.ringkasan12Bulan.length === 12 &&
+  monthlyResult.ringkasan12Bulan[0].bulan === "2026-08" &&
+  monthlyResult.ringkasan12Bulan[3].bulan === "2026-11" &&
+  monthlyResult.ringkasan12Bulan[3].isCurrent === true &&
+  monthlyResult.ringkasan12Bulan[3].total === 4 &&
+  monthlyResult.ringkasan12Bulan[3].belumDiperpanjang === 3,
+  "Rev-4. Ringkasan 12 bulan mencakup 3 bulan lalu s.d. bulan ini & 8 bulan ke depan dengan hitungan akurat"
+);
+
+// Karyawan PKWTT tidak muncul di bulan mana pun maupun perluDilengkapi
+assert(
+  !novGroup.items.some((i) => i.nama_asli === "Karyawan Tetap") &&
+  !monthlyResult.perluDilengkapi.some((i) => i.nama_asli === "Karyawan Tetap"),
+  "Rev-5. Karyawan PKWTT tidak muncul di bulan mana pun"
+);
+
+// Karyawan PKWT dengan kolom J '-' atau '0' masuk Perlu dilengkapi
+assert(
+  monthlyResult.perluDilengkapi.some((i) => i.nama_asli === "Karyawan Kotor") &&
+  monthlyResult.perluDilengkapi.some((i) => i.nama_asli === "Karyawan Nol"),
+  "Rev-6. Karyawan PKWT dengan kolom J '-' atau '0' masuk ke bagian 'Perlu dilengkapi'"
+);
+
+// Mode Dashboard (default includeRenewed: false) tetap hanya memuat yang belum diperpanjang
+const dashResult = processDueEmployees(mapped.employees, novContracts, {
+  now: NOW_TEST,
+});
+assert(
+  dashResult.bulanIni.length === 3 && !dashResult.bulanIni.some((i) => i.nama_asli === "Dimas Sugiono"),
+  "Rev-7. Blok Dashboard (default) tetap hanya menampilkan yang belum diperpanjang"
+);
+
+console.log("\n🎉 SEMUA PENGUJIAN LOGIKA, KRITERIA 6a-6f, DAN REVISI BAGIAN 1 & 3 BERHASIL 100%!");
 

@@ -144,7 +144,7 @@ export function JatuhTempoDashboardSection({ dueData, now }) {
 
         {/* 4. Bulan Ini */}
         <Link
-          href={`/jatuh-tempo?bulan=${thisMonthKey}`}
+          href={`/jatuh-tempo?bulan=${thisMonthKey}&belum=1`}
           className="group relative flex flex-col rounded-lg border border-primary/20 bg-primary/5 p-3.5 transition-all hover:border-primary/40 hover:shadow-sm"
         >
           <div className="flex items-center justify-between">
@@ -163,7 +163,7 @@ export function JatuhTempoDashboardSection({ dueData, now }) {
 
         {/* 5. Bulan Depan */}
         <Link
-          href={`/jatuh-tempo?bulan=${nextMonthKey}`}
+          href={`/jatuh-tempo?bulan=${nextMonthKey}&belum=1`}
           className="group relative flex flex-col rounded-lg border border-border bg-surface-1 p-3.5 transition-all hover:border-text-2/40 hover:shadow-sm col-span-2 sm:col-span-1"
         >
           <div className="flex items-center justify-between">
@@ -316,7 +316,7 @@ export function JatuhTempoDashboardSection({ dueData, now }) {
                           Menampilkan {top5.length} dari {count} karyawan jatuh tempo di bulan {m.label}
                         </span>
                         <Link
-                          href={`/jatuh-tempo?bulan=${m.bulan}`}
+                          href={`/jatuh-tempo?bulan=${m.bulan}&belum=1`}
                           className="font-semibold text-primary hover:underline inline-flex items-center gap-1 text-xs"
                         >
                           Lihat semua ({count}) →

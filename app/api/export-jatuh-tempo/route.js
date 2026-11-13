@@ -14,15 +14,18 @@ export async function GET(req) {
 
     const { searchParams } = new URL(req.url);
     const bulan = searchParams.get("bulan") || "";
-    const status = searchParams.get("status") || "PKWT";
+    const status = searchParams.get("status") || "semua";
     const perusahaan = searchParams.get("perusahaan") || "";
     const search = searchParams.get("search") || "";
     const filter = searchParams.get("filter") || "";
+    const onlyUnrenewed =
+      searchParams.get("belum") === "1" || searchParams.get("belum") === "true";
 
     const dueData = await getDueEmployees({
       status: status === "semua" ? null : status,
       perusahaan: perusahaan === "semua" ? null : perusahaan,
       search: search || null,
+      includeRenewed: true,
     });
 
     let items = [];
@@ -45,18 +48,35 @@ export async function GET(req) {
       items = g ? g.items : [];
     } else {
       items = dueData.groups.flatMap((g) => g.items);
+      fileLabel = "Semua-Bulan";
+    }
+
+    if (onlyUnrenewed && filter !== "perluDilengkapi") {
+      items = items.filter((item) => !item.sudah_diperpanjang);
     }
 
     const rows = items.map((item, idx) => {
-      let statusKet = "Aktif";
-      if (item.sisa_hari === null || item.sisa_hari === undefined) {
-        statusKet = "Tanggal Habis Kontrak Kosong";
+      let statusPerpanjangan = "Belum diperpanjang";
+      let keteranganWaktu = "-";
+
+      if (item.sudah_diperpanjang) {
+        statusPerpanjangan = "Sudah diperpanjang";
+        if (item.tanggal_berakhir_baru_id) {
+          keteranganWaktu = `Perpanjangan s.d. ${item.tanggal_berakhir_baru_id}`;
+        } else if (item.tanggal_mulai_baru) {
+          keteranganWaktu = `Perpanjangan mulai ${formatIsoId(item.tanggal_mulai_baru)}`;
+        } else {
+          keteranganWaktu = "Sudah diperpanjang";
+        }
+      } else if (item.sisa_hari === null || item.sisa_hari === undefined) {
+        statusPerpanjangan = "Perlu dilengkapi";
+        keteranganWaktu = "Tanggal habis kontrak kosong di sheet";
       } else if (item.sisa_hari < 0) {
-        statusKet = `Sudah Lewat (${Math.abs(item.sisa_hari)} hari)`;
-      } else if (item.sisa_hari <= 7) {
-        statusKet = `≤ 7 Hari (${item.sisa_hari} hari lagi)`;
+        keteranganWaktu = `Sudah lewat (${Math.abs(item.sisa_hari)} hari)`;
       } else if (item.sisa_hari <= 30) {
-        statusKet = `≤ 30 Hari (${item.sisa_hari} hari lagi)`;
+        keteranganWaktu = `${item.sisa_hari} hari lagi (segera)`;
+      } else {
+        keteranganWaktu = `${item.sisa_hari} hari lagi`;
       }
 
       let catatan = "-";
@@ -71,11 +91,12 @@ export async function GET(req) {
         "Posisi": item.posisi || "-",
         "Divisi": item.divisi || "-",
         "Lini Bisnis": item.lini_bisnis || "-",
-        "Status Karyawan": item.status_karyawan || "-",
+        "Tipe Kontrak": item.status_karyawan || "-",
         "Tanggal Masuk": item.tanggal_masuk ? formatIsoId(item.tanggal_masuk) : "-",
         "Tanggal Habis Kontrak": item.tanggal_habis_kontrak ? formatIsoId(item.tanggal_habis_kontrak) : "-",
-        "Sisa Hari": typeof item.sisa_hari === "number" ? item.sisa_hari : "-",
-        "Status Jatuh Tempo": statusKet,
+        "Status": statusPerpanjangan,
+        "Tanggal Berakhir Baru": item.tanggal_berakhir_baru_id || "-",
+        "Keterangan": keteranganWaktu,
         "Catatan Dokumen": catatan,
       };
     });
@@ -83,27 +104,26 @@ export async function GET(req) {
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(rows);
 
-    // Auto column widths
-    const colWidths = [
+    ws["!cols"] = [
       { wch: 6 },  // No
       { wch: 30 }, // Nama
       { wch: 15 }, // NIK
       { wch: 22 }, // Posisi
       { wch: 16 }, // Divisi
       { wch: 18 }, // Lini Bisnis
-      { wch: 15 }, // Status
+      { wch: 14 }, // Tipe Kontrak
       { wch: 18 }, // Tgl Masuk
       { wch: 22 }, // Tgl Habis Kontrak
-      { wch: 12 }, // Sisa Hari
-      { wch: 22 }, // Status Jatuh Tempo
-      { wch: 45 }, // Catatan
+      { wch: 20 }, // Status
+      { wch: 22 }, // Tgl Berakhir Baru
+      { wch: 30 }, // Keterangan
+      { wch: 45 }, // Catatan Dokumen
     ];
-    ws["!cols"] = colWidths;
 
     XLSX.utils.book_append_sheet(wb, ws, "Jatuh Tempo");
     const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
 
-    const filename = `Jatuh-Tempo-${fileLabel}-${status || "PKWT"}.xlsx`;
+    const filename = `Jatuh-Tempo-${fileLabel}-${status || "semua"}.xlsx`;
 
     return new Response(buf, {
       status: 200,

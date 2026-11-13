@@ -1,24 +1,27 @@
 import { auth } from "@/auth";
 import { supabaseAdmin } from "@/lib/supabase";
 import { getDueEmployees, getDueSp } from "@/lib/jatuh-tempo";
+import { getTodayWib } from "@/lib/contract-lifecycle";
 import { JatuhTempoView } from "@/components/JatuhTempoView";
 
 export const dynamic = "force-dynamic";
 
 export default async function JatuhTempoPage({ searchParams }) {
-  const session = await auth();
+  await auth();
   const sp = (await searchParams) || {};
+  const currentMonth = getTodayWib().slice(0, 7);
 
-  const initialStatus = sp.status || "PKWT";
+  const initialStatus = sp.status || "semua";
   const initialPerusahaan = sp.perusahaan || "";
   const initialSearch = sp.search || "";
   const initialFilter = sp.filter || "";
-  const initialBulan = sp.bulan || "";
-  const initialTab = sp.tab || "pkwt";
+  const initialBulan = sp.bulan || (initialFilter ? "" : currentMonth);
+  const initialOnlyUnrenewed = sp.belum === "1" || sp.belum === "true";
 
   // Ambil data jatuh tempo PKWT dan SP dari server secara paralel
   let dueData = {
     groups: [],
+    ringkasan12Bulan: [],
     lewat: [],
     hari7: [],
     hari30: [],
@@ -26,23 +29,14 @@ export default async function JatuhTempoPage({ searchParams }) {
     bulanDepan: [],
     perluDilengkapi: [],
   };
-  let dueSpData = {
-    groups: [],
-    lewat: [],
-    hari7: [],
-    hari30: [],
-    bulanIni: [],
-    bulanDepan: [],
-    total: 0,
-    items: [],
-  };
 
   try {
-    const [dueRes, spRes] = await Promise.all([
+    const [dueRes] = await Promise.all([
       getDueEmployees({
         status: initialStatus === "semua" ? null : initialStatus,
         perusahaan: initialPerusahaan === "semua" ? null : initialPerusahaan,
         search: initialSearch,
+        includeRenewed: true,
         now: new Date(),
       }),
       getDueSp({
@@ -52,7 +46,6 @@ export default async function JatuhTempoPage({ searchParams }) {
       }),
     ]);
     dueData = dueRes;
-    dueSpData = spRes;
   } catch (err) {
     console.error("Gagal mengambil data jatuh tempo:", err);
   }
@@ -83,11 +76,13 @@ export default async function JatuhTempoPage({ searchParams }) {
     <div className="py-2">
       <JatuhTempoView
         dueData={dueData}
+        currentMonth={currentMonth}
         initialBulan={initialBulan}
         initialStatus={initialStatus}
         initialPerusahaan={initialPerusahaan}
         initialSearch={initialSearch}
         initialFilter={initialFilter}
+        initialOnlyUnrenewed={initialOnlyUnrenewed}
         companyOptions={companyOptions}
         lastMasterSync={lastMasterSync}
       />
