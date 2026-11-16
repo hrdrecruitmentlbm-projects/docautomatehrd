@@ -30,6 +30,8 @@ export default async function JatuhTempoPage({ searchParams }) {
     perluDilengkapi: [],
   };
 
+  let loadError = null;
+
   try {
     const [dueRes] = await Promise.all([
       getDueEmployees({
@@ -48,6 +50,7 @@ export default async function JatuhTempoPage({ searchParams }) {
     dueData = dueRes;
   } catch (err) {
     console.error("Gagal mengambil data jatuh tempo:", err);
+    loadError = err?.message || "Gagal memuat data jatuh tempo dari database.";
   }
 
   // Ambil waktu sinkronisasi terakhir dari settings
@@ -85,6 +88,7 @@ export default async function JatuhTempoPage({ searchParams }) {
         initialOnlyUnrenewed={initialOnlyUnrenewed}
         companyOptions={companyOptions}
         lastMasterSync={lastMasterSync}
+        loadError={loadError}
       />
     </div>
   );

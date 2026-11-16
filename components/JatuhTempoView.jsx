@@ -59,6 +59,7 @@ export function JatuhTempoView({
   initialOnlyUnrenewed = false,
   companyOptions = [],
   lastMasterSync = null,
+  loadError = null,
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -235,6 +236,17 @@ export function JatuhTempoView({
           </Link>
         </div>
       </div>
+
+      {/* Peringatan Error / Migrasi Database (jika ada) */}
+      {(loadError || dueData?.dbWarning) && (
+        <div className="flex items-start gap-2.5 rounded-lg border border-red-300 bg-red-50/80 dark:bg-red-950/30 p-3.5 text-xs text-red-900 dark:text-red-200">
+          <AlertTriangle className="size-4 shrink-0 text-red-600 mt-0.5" />
+          <div>
+            <p className="font-semibold">Perhatian Data Database</p>
+            <p className="mt-0.5">{loadError || dueData?.dbWarning}</p>
+          </div>
+        </div>
+      )}
 
       {/* STRUKTUR TAB (PKWT | SP) */}
       <div className="flex border-b border-border gap-2">

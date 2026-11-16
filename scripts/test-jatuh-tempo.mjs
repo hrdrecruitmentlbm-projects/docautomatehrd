@@ -456,5 +456,59 @@ assert(
   "Rev-7. Blok Dashboard (default) tetap hanya menampilkan yang belum diperpanjang"
 );
 
-console.log("\n🎉 SEMUA PENGUJIAN LOGIKA, KRITERIA 6a-6f, DAN REVISI BAGIAN 1 & 3 BERHASIL 100%!");
+// === UJI REGRESI: SKEMA NYATA TANPA KOLOM id & FORMAT TANGGAL SHEET ===
+assert(
+  mapped.employees.every((e) => !("id" in e) && Boolean(e.nama_key)) &&
+    novGroup.items.every((item) => item.id === item.nama_key),
+  "Reg-1. Karyawan tanpa kolom id (hanya nama_key seperti tabel Postgres) tetap diproses dan memakai nama_key"
+);
+
+assert(
+  toIsoDate("17-Okt-26") === "2026-10-17" &&
+    toIsoDate("17-Nov-26") === "2026-11-17" &&
+    toIsoDate("17/11/26") === "2026-11-17" &&
+    toIsoDate("2026/11/17") === "2026-11-17" &&
+    toIsoDate("November 17, 2026") === "2026-11-17" &&
+    toIsoDate("11/26/2026") === "2026-11-26" &&
+    toIsoDate("46343.5") === "2026-11-17",
+  "Reg-2. Beragam format tanggal sheet (2-digit year, Okt/Nov, DD/MM/YY, YYYY/MM/DD, US MM/DD/YYYY, Month DD YYYY, serial) terbaca ke ISO"
+);
+
+const variantEmployees = [
+  {
+    nama_key: "pkwt_satu",
+    nama_asli: "Karyawan PKWT 1",
+    status_karyawan: "PKWT 1",
+    tanggal_habis_kontrak: "2026-11-20",
+  },
+  {
+    nama_key: "pkwt_dua",
+    nama_asli: "Karyawan PKWT II",
+    status_karyawan: "PKWT II",
+    tanggal_habis_kontrak: "2026-11-21",
+  },
+  {
+    nama_key: "pkwtt_tetap",
+    nama_asli: "Karyawan PKWTT",
+    status_karyawan: "PKWTT",
+    tanggal_habis_kontrak: "2026-11-22",
+  },
+];
+const variantResult = processDueEmployees(variantEmployees, [], {
+  now: NOW_TEST,
+  status: "PKWT",
+  includeRenewed: true,
+});
+const variantNov = variantResult.groups.find((g) => g.bulan === "2026-11");
+assert(
+  variantNov &&
+    variantNov.items.length === 2 &&
+    variantNov.items.some((i) => i.nama_asli === "Karyawan PKWT 1") &&
+    variantNov.items.some((i) => i.nama_asli === "Karyawan PKWT II") &&
+    !variantNov.items.some((i) => i.nama_asli === "Karyawan PKWTT"),
+  "Reg-3. Status PKWT 1 / PKWT II terbaca di filter PKWT sedangkan PKWTT tetap dikecualikan"
+);
+
+console.log("\n🎉 SEMUA PENGUJIAN LOGIKA, KRITERIA 6a-6f, REVISI BAGIAN 1 & 3, DAN REGRESI BERHASIL 100%!");
+
 
