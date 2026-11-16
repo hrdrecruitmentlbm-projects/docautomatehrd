@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import {
   CalendarClock,
   Calendar,
@@ -30,6 +30,7 @@ import {
   getMonthLabel,
   getAdjacentMonthIso,
 } from "@/lib/contract-lifecycle";
+import { normalizeLiniBisnis } from "@/lib/pkwt";
 
 function formatSyncTime(isoString) {
   if (!isoString) return null;
@@ -48,6 +49,63 @@ function formatSyncTime(isoString) {
   );
 }
 
+function matchesEmployeeFilters(item, { status, perusahaan, search }) {
+  if (status && status !== "semua") {
+    const targetStatus = String(status).trim().toUpperCase();
+    const cat = String(item.status_kategori || "").trim().toUpperCase();
+    const raw = String(item.status_karyawan || "").trim().toUpperCase();
+    if (cat !== targetStatus && raw !== targetStatus) {
+      return false;
+    }
+  }
+
+  if (perusahaan && perusahaan !== "semua") {
+    const targetCompany = normalizeLiniBisnis(perusahaan);
+    const empLine = item.lini_bisnis ? normalizeLiniBisnis(item.lini_bisnis) : "";
+    const empUnit = item.unit ? normalizeLiniBisnis(item.unit) : "";
+    if (empLine !== targetCompany && empUnit !== targetCompany) {
+      return false;
+    }
+  }
+
+  if (search && String(search).trim()) {
+    const q = String(search).trim().toLowerCase();
+    const matchNama = item.nama_asli ? item.nama_asli.toLowerCase().includes(q) : false;
+    const matchKey = item.nama_key ? item.nama_key.toLowerCase().includes(q) : false;
+    const matchNik = item.nik_internal ? String(item.nik_internal).toLowerCase().includes(q) : false;
+    const matchPosisi = item.posisi ? String(item.posisi).toLowerCase().includes(q) : false;
+    if (!matchNama && !matchKey && !matchNik && !matchPosisi) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function buildFilterQuery(filters, fallbackMonth) {
+  const params = new URLSearchParams();
+  if (filters.filter) {
+    params.set("filter", filters.filter);
+  } else if (filters.bulan && filters.bulan !== fallbackMonth) {
+    params.set("bulan", filters.bulan);
+  } else if (filters.bulan === "semua") {
+    params.set("bulan", "semua");
+  }
+  if (filters.status && filters.status !== "semua") {
+    params.set("status", filters.status);
+  }
+  if (filters.perusahaan) {
+    params.set("perusahaan", filters.perusahaan);
+  }
+  if (filters.search && filters.search.trim()) {
+    params.set("search", filters.search.trim());
+  }
+  if (filters.belum) {
+    params.set("belum", "1");
+  }
+  return params.toString();
+}
+
 export function JatuhTempoView({
   dueData,
   currentMonth = "",
@@ -61,62 +119,87 @@ export function JatuhTempoView({
   lastMasterSync = null,
   loadError = null,
 }) {
-  const router = useRouter();
   const searchParams = useSearchParams();
+  const fallbackMonth = currentMonth || getTodayWib().slice(0, 7);
+  const nextMonthKey = getAdjacentMonthIso(fallbackMonth, 1);
 
   // Tab aktif: 'pkwt' | 'sp'
   const [activeTab, setActiveTab] = React.useState("pkwt");
 
-  // Derivasikan filter URL langsung dari searchParams agar selalu sinkron dengan navigasi
-  const spFilter = searchParams.get("filter");
-  const activeQuickFilter = spFilter !== null ? spFilter : initialFilter;
+  // State filter instan di client, tetap disinkronkan ke URL query string
+  const [filters, setFilters] = React.useState(() => ({
+    filter: initialFilter || "",
+    bulan: initialFilter ? "" : initialBulan || fallbackMonth,
+    status: initialStatus || "semua",
+    perusahaan: initialPerusahaan || "",
+    search: initialSearch || "",
+    belum: Boolean(initialOnlyUnrenewed),
+  }));
 
-  const spBulan = searchParams.get("bulan");
-  const fallbackMonth = currentMonth || getTodayWib().slice(0, 7);
-  const selectedBulan = activeQuickFilter
-    ? ""
-    : spBulan !== null
-      ? spBulan
-      : initialBulan || fallbackMonth;
-
-  const spStatus = searchParams.get("status");
-  const selectedStatus = spStatus !== null ? spStatus : initialStatus;
-
-  const spPerusahaan = searchParams.get("perusahaan");
-  const selectedPerusahaan = spPerusahaan !== null ? spPerusahaan : initialPerusahaan;
-
-  const spSearch = searchParams.get("search");
-  const activeSearch = spSearch !== null ? spSearch : initialSearch;
-
-  const spBelum = searchParams.get("belum");
-  const onlyUnrenewed =
-    spBelum !== null ? spBelum === "1" || spBelum === "true" : initialOnlyUnrenewed;
-
-  // Input pencarian lokal (dikirim saat Enter / klik Terapkan Filter)
-  const [searchInput, setSearchInput] = React.useState(activeSearch);
+  const [searchInput, setSearchInput] = React.useState(initialSearch || "");
+  const lastQsRef = React.useRef(searchParams.toString());
+  const resultsRef = React.useRef(null);
 
   // Dialog Buat Perpanjangan
   const [renewalItem, setRenewalItem] = React.useState(null);
   const [renewalOpen, setRenewalOpen] = React.useState(false);
 
-  const updateUrlParams = (patch) => {
-    const params = new URLSearchParams(searchParams.toString());
-    Object.entries(patch).forEach(([k, v]) => {
-      if (v !== undefined && v !== null && v !== "") {
-        params.set(k, v);
-      } else {
-        params.delete(k);
-      }
+  // Sinkronkan saat user klik link eksternal (Sidebar/Dashboard) atau tombol Back/Forward
+  const spString = searchParams.toString();
+  React.useEffect(() => {
+    if (spString === lastQsRef.current) return;
+    lastQsRef.current = spString;
+    const sp = new URLSearchParams(spString);
+    const nextFilter = sp.get("filter") || "";
+    const nextBulan = nextFilter ? "" : sp.get("bulan") || fallbackMonth;
+    const nextStatus = sp.get("status") || "semua";
+    const nextPerusahaan = sp.get("perusahaan") || "";
+    const nextSearch = sp.get("search") || "";
+    const nextBelum = sp.get("belum") === "1" || sp.get("belum") === "true";
+
+    setFilters({
+      filter: nextFilter,
+      bulan: nextBulan,
+      status: nextStatus,
+      perusahaan: nextPerusahaan,
+      search: nextSearch,
+      belum: nextBelum,
     });
-    const qs = params.toString();
-    router.push(qs ? `/jatuh-tempo?${qs}` : "/jatuh-tempo");
+    setSearchInput(nextSearch);
+  }, [spString, fallbackMonth]);
+
+  const applyFilterPatch = (patch, { scrollToTable = false } = {}) => {
+    const next = { ...filters, ...patch };
+    const qs = buildFilterQuery(next, fallbackMonth);
+    lastQsRef.current = qs;
+    setFilters(next);
+
+    if (typeof window !== "undefined") {
+      const nextUrl = qs ? `/jatuh-tempo?${qs}` : "/jatuh-tempo";
+      window.history.replaceState(null, "", nextUrl);
+      if (scrollToTable) {
+        window.requestAnimationFrame(() => {
+          resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+      }
+    }
   };
 
-  const handleMonthChange = (bulan) => {
-    updateUrlParams({
-      bulan: bulan || "semua",
-      filter: "",
-    });
+  const activeQuickFilter = filters.filter;
+  const selectedBulan = activeQuickFilter ? "" : filters.bulan || fallbackMonth;
+  const selectedStatus = filters.status || "semua";
+  const selectedPerusahaan = filters.perusahaan || "";
+  const activeSearch = filters.search || "";
+  const onlyUnrenewed = Boolean(filters.belum);
+
+  const handleMonthChange = (bulan, opts = {}) => {
+    applyFilterPatch(
+      {
+        bulan: bulan || "semua",
+        filter: "",
+      },
+      opts
+    );
   };
 
   const handlePrevMonth = () => {
@@ -134,48 +217,141 @@ export function JatuhTempoView({
   const handleQuickFilter = (qf) => {
     const nextQf = activeQuickFilter === qf ? "" : qf;
     if (nextQf) {
-      updateUrlParams({ filter: nextQf, bulan: "" });
+      applyFilterPatch({ filter: nextQf, bulan: "" }, { scrollToTable: true });
     } else {
-      updateUrlParams({ filter: "", bulan: fallbackMonth });
+      applyFilterPatch({ filter: "", bulan: fallbackMonth }, { scrollToTable: true });
     }
   };
 
   const handleToggleUnrenewed = (checked) => {
-    updateUrlParams({
-      belum: checked ? "1" : "",
-    });
+    applyFilterPatch({ belum: checked });
+  };
+
+  const handleSearchInputChange = (val) => {
+    setSearchInput(val);
+    applyFilterPatch({ search: val });
   };
 
   const handleApplySearch = () => {
-    updateUrlParams({
-      search: searchInput.trim(),
-    });
+    applyFilterPatch({ search: searchInput.trim() }, { scrollToTable: true });
   };
 
   const handleResetFilters = () => {
     setSearchInput("");
-    router.push(`/jatuh-tempo?bulan=${fallbackMonth}`);
+    applyFilterPatch({
+      filter: "",
+      bulan: fallbackMonth,
+      status: "semua",
+      perusahaan: "",
+      search: "",
+      belum: false,
+    });
   };
+
+  // Hitung semua daftar & ringkasan secara instan dari dueData berdasarkan filter aktif
+  const {
+    filteredTimedItems,
+    lewatList,
+    hari7List,
+    hari30List,
+    bulanIniList,
+    bulanDepanList,
+    ringkasan12Bulan,
+    filteredPerluDilengkapi,
+    monthOptions,
+  } = React.useMemo(() => {
+    const allTimed = (dueData?.groups || []).flatMap((g) => g.items || []);
+    const filterObj = {
+      status: selectedStatus,
+      perusahaan: selectedPerusahaan,
+      search: searchInput,
+    };
+
+    const timed = allTimed.filter((item) => matchesEmployeeFilters(item, filterObj));
+
+    const lewatArr = timed
+      .filter((i) => !i.sudah_diperpanjang && i.sisa_hari < 0)
+      .sort((a, b) => b.tanggal_habis_kontrak.localeCompare(a.tanggal_habis_kontrak));
+    const hari7Arr = timed
+      .filter((i) => !i.sudah_diperpanjang && i.sisa_hari >= 0 && i.sisa_hari <= 7)
+      .sort((a, b) => a.sisa_hari - b.sisa_hari);
+    const hari30Arr = timed
+      .filter((i) => !i.sudah_diperpanjang && i.sisa_hari >= 0 && i.sisa_hari <= 30)
+      .sort((a, b) => a.sisa_hari - b.sisa_hari);
+    const bulanIniArr = timed
+      .filter((i) => !i.sudah_diperpanjang && i.bulan === fallbackMonth)
+      .sort((a, b) => a.sisa_hari - b.sisa_hari);
+    const bulanDepanArr = timed
+      .filter((i) => !i.sudah_diperpanjang && i.bulan === nextMonthKey)
+      .sort((a, b) => a.sisa_hari - b.sisa_hari);
+
+    const byMonthMap = new Map();
+    for (const item of timed) {
+      if (!item.bulan) continue;
+      if (!byMonthMap.has(item.bulan)) byMonthMap.set(item.bulan, []);
+      byMonthMap.get(item.bulan).push(item);
+    }
+
+    const r12 = (dueData?.ringkasan12Bulan || []).map((m) => {
+      const mItems = byMonthMap.get(m.bulan) || [];
+      const sudahCount = mItems.filter((i) => i.sudah_diperpanjang).length;
+      return {
+        ...m,
+        total: mItems.length,
+        sudahDiperpanjang: sudahCount,
+        belumDiperpanjang: mItems.length - sudahCount,
+      };
+    });
+
+    const perlu = (dueData?.perluDilengkapi || []).filter((item) =>
+      matchesEmployeeFilters(item, filterObj)
+    );
+
+    // Susun opsi dropdown bulan (12 bulan ringkasan + bulan lain yang ada datanya + selectedBulan)
+    const optionKeys = new Set();
+    for (const m of r12) optionKeys.add(m.bulan);
+    for (const k of byMonthMap.keys()) optionKeys.add(k);
+    if (selectedBulan && selectedBulan !== "semua") optionKeys.add(selectedBulan);
+
+    const mOptions = Array.from(optionKeys)
+      .sort()
+      .map((mIso) => ({
+        bulan: mIso,
+        label: getMonthLabel(mIso) || mIso,
+        count: (byMonthMap.get(mIso) || []).length,
+      }));
+
+    return {
+      filteredTimedItems: timed,
+      lewatList: lewatArr,
+      hari7List: hari7Arr,
+      hari30List: hari30Arr,
+      bulanIniList: bulanIniArr,
+      bulanDepanList: bulanDepanArr,
+      ringkasan12Bulan: r12,
+      filteredPerluDilengkapi: perlu,
+      monthOptions: mOptions,
+    };
+  }, [dueData, selectedStatus, selectedPerusahaan, searchInput, fallbackMonth, nextMonthKey, selectedBulan]);
 
   // Tentukan kumpulan item sebelum filter "Belum diperpanjang saja"
   let rawScopeItems = [];
   let currentGroupLabel = "Semua Bulan";
 
   if (activeQuickFilter === "lewat") {
-    rawScopeItems = dueData?.lewat || [];
+    rawScopeItems = lewatList;
     currentGroupLabel = "Sudah Lewat & Belum Diperpanjang";
   } else if (activeQuickFilter === "hari7") {
-    rawScopeItems = dueData?.hari7 || [];
+    rawScopeItems = hari7List;
     currentGroupLabel = "Jatuh Tempo ≤ 7 Hari";
   } else if (activeQuickFilter === "hari30") {
-    rawScopeItems = dueData?.hari30 || [];
+    rawScopeItems = hari30List;
     currentGroupLabel = "Jatuh Tempo ≤ 30 Hari";
   } else if (selectedBulan && selectedBulan !== "semua") {
-    const group = dueData?.groups?.find((g) => g.bulan === selectedBulan);
-    rawScopeItems = group?.items || [];
+    rawScopeItems = filteredTimedItems.filter((i) => i.bulan === selectedBulan);
     currentGroupLabel = getMonthLabel(selectedBulan) || selectedBulan;
   } else {
-    rawScopeItems = dueData?.groups?.flatMap((g) => g.items) || [];
+    rawScopeItems = filteredTimedItems;
     currentGroupLabel = "Semua Bulan";
   }
 
@@ -189,8 +365,7 @@ export function JatuhTempoView({
     ? rawScopeItems.filter((i) => !i.sudah_diperpanjang)
     : rawScopeItems;
 
-  const totalAllUnrenewed =
-    (dueData?.groups || []).reduce((acc, g) => acc + (g.belumDiperpanjang || 0), 0);
+  const totalAllUnrenewed = filteredTimedItems.filter((i) => !i.sudah_diperpanjang).length;
 
   // URL Ekspor Excel mengikuti bulan dan seluruh filter aktif
   const exportQs = new URLSearchParams({
@@ -203,7 +378,6 @@ export function JatuhTempoView({
   }).toString();
 
   const exportUrl = `/api/export-jatuh-tempo?${exportQs}`;
-  const ringkasan12Bulan = dueData?.ringkasan12Bulan || [];
 
   return (
     <div className="space-y-5 max-w-7xl">
@@ -308,7 +482,7 @@ export function JatuhTempoView({
             >
               <span className="text-xs font-medium text-red-700 dark:text-red-400">Sudah Lewat</span>
               <span className="text-2xl font-bold text-red-800 dark:text-red-300 mt-1">
-                {dueData?.lewat?.length || 0}
+                {lewatList.length}
               </span>
               <span className="text-[11px] text-text-2 mt-0.5">Belum diperpanjang</span>
             </button>
@@ -324,7 +498,7 @@ export function JatuhTempoView({
             >
               <span className="text-xs font-medium text-amber-700 dark:text-amber-400">≤ 7 Hari</span>
               <span className="text-2xl font-bold text-amber-800 dark:text-amber-300 mt-1">
-                {dueData?.hari7?.length || 0}
+                {hari7List.length}
               </span>
               <span className="text-[11px] text-text-2 mt-0.5">Belum diperpanjang</span>
             </button>
@@ -340,14 +514,14 @@ export function JatuhTempoView({
             >
               <span className="text-xs font-medium text-amber-700 dark:text-amber-400">≤ 30 Hari</span>
               <span className="text-2xl font-bold text-amber-800 dark:text-amber-300 mt-1">
-                {dueData?.hari30?.length || 0}
+                {hari30List.length}
               </span>
               <span className="text-[11px] text-text-2 mt-0.5">Belum diperpanjang</span>
             </button>
 
             <button
               type="button"
-              onClick={() => handleMonthChange(fallbackMonth)}
+              onClick={() => handleMonthChange(fallbackMonth, { scrollToTable: true })}
               className={`flex flex-col text-left p-3.5 rounded-lg border transition-all ${
                 selectedBulan === fallbackMonth && !activeQuickFilter
                   ? "border-primary bg-primary/5 ring-2 ring-primary/20"
@@ -356,26 +530,26 @@ export function JatuhTempoView({
             >
               <span className="text-xs font-medium text-text-2">Bulan Ini (Belum)</span>
               <span className="text-2xl font-bold text-text-1 mt-1">
-                {dueData?.bulanIni?.length || 0}
+                {bulanIniList.length}
               </span>
               <span className="text-[11px] text-text-2 mt-0.5">{getMonthLabel(fallbackMonth)}</span>
             </button>
 
             <button
               type="button"
-              onClick={() => handleMonthChange(getAdjacentMonthIso(fallbackMonth, 1))}
+              onClick={() => handleMonthChange(nextMonthKey, { scrollToTable: true })}
               className={`flex flex-col text-left p-3.5 rounded-lg border transition-all col-span-2 sm:col-span-1 ${
-                selectedBulan === getAdjacentMonthIso(fallbackMonth, 1) && !activeQuickFilter
+                selectedBulan === nextMonthKey && !activeQuickFilter
                   ? "border-primary bg-primary/5 ring-2 ring-primary/20"
                   : "border-border bg-surface-1 hover:bg-surface-2"
               }`}
             >
               <span className="text-xs font-medium text-text-2">Bulan Depan (Belum)</span>
               <span className="text-2xl font-bold text-text-1 mt-1">
-                {dueData?.bulanDepan?.length || 0}
+                {bulanDepanList.length}
               </span>
               <span className="text-[11px] text-text-2 mt-0.5">
-                {getMonthLabel(getAdjacentMonthIso(fallbackMonth, 1))}
+                {getMonthLabel(nextMonthKey)}
               </span>
             </button>
           </div>
@@ -402,8 +576,8 @@ export function JatuhTempoView({
                     <button
                       key={m.bulan}
                       type="button"
-                      onClick={() => handleMonthChange(m.bulan)}
-                      className={`flex flex-col text-left rounded-md border p-2.5 transition-all ${
+                      onClick={() => handleMonthChange(m.bulan, { scrollToTable: true })}
+                      className={`flex flex-col text-left rounded-md border p-2.5 transition-all cursor-pointer ${
                         isSelected
                           ? "border-primary bg-primary/10 ring-2 ring-primary/20"
                           : "border-border bg-surface-0 hover:bg-surface-2"
@@ -459,12 +633,21 @@ export function JatuhTempoView({
                 <ChevronLeft className="size-4" />
               </Button>
 
-              <Input
-                type="month"
-                value={selectedBulan && selectedBulan !== "semua" ? selectedBulan : ""}
+              <select
+                aria-label="Pilih bulan jatuh tempo"
+                value={selectedBulan || "semua"}
                 onChange={(e) => handleMonthChange(e.target.value)}
-                className="h-8 w-44 font-mono text-xs"
-              />
+                className="h-8 min-w-48 rounded-md border border-border bg-surface-0 px-2.5 text-xs font-medium text-text-1 focus:border-primary focus:outline-none"
+              >
+                <option value="semua">
+                  Semua Bulan ({filteredTimedItems.length})
+                </option>
+                {monthOptions.map((opt) => (
+                  <option key={opt.bulan} value={opt.bulan}>
+                    {opt.label} ({opt.count})
+                  </option>
+                ))}
+              </select>
 
               <Button
                 variant="ghost"
@@ -523,7 +706,7 @@ export function JatuhTempoView({
                 <Label className="text-[11px] text-text-2 mb-1 block">Perusahaan / Lini</Label>
                 <select
                   value={selectedPerusahaan}
-                  onChange={(e) => updateUrlParams({ perusahaan: e.target.value })}
+                  onChange={(e) => applyFilterPatch({ perusahaan: e.target.value })}
                   className="h-8 w-full rounded-md border border-border bg-surface-0 px-2.5 text-xs text-text-1 focus:border-primary focus:outline-none"
                 >
                   <option value="">Semua Perusahaan</option>
@@ -540,7 +723,7 @@ export function JatuhTempoView({
                 <Label className="text-[11px] text-text-2 mb-1 block">Status Karyawan</Label>
                 <select
                   value={selectedStatus}
-                  onChange={(e) => updateUrlParams({ status: e.target.value })}
+                  onChange={(e) => applyFilterPatch({ status: e.target.value })}
                   className="h-8 w-full rounded-md border border-border bg-surface-0 px-2.5 text-xs text-text-1 focus:border-primary focus:outline-none font-medium"
                 >
                   <option value="semua">Semua Kontrak (PKWT / Freelance / Training)</option>
@@ -558,7 +741,7 @@ export function JatuhTempoView({
                     <Search className="absolute left-2.5 top-2 size-3.5 text-text-2" />
                     <Input
                       value={searchInput}
-                      onChange={(e) => setSearchInput(e.target.value)}
+                      onChange={(e) => handleSearchInputChange(e.target.value)}
                       onKeyDown={(e) => {
                         if (e.key === "Enter") handleApplySearch();
                       }}
@@ -608,7 +791,7 @@ export function JatuhTempoView({
           </div>
 
           {/* RINGKASAN BULAN DI ATAS TABEL */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div ref={resultsRef} className="grid grid-cols-1 sm:grid-cols-3 gap-3 scroll-mt-4">
             <div className="rounded-lg border border-border bg-surface-1 px-4 py-3 flex items-center justify-between">
               <div>
                 <div className="text-[11px] font-medium text-text-2">
@@ -842,13 +1025,13 @@ export function JatuhTempoView({
           </div>
 
           {/* BAGIAN TERPISAH: PERLU DILENGKAPI */}
-          {dueData?.perluDilengkapi?.length > 0 && (
+          {filteredPerluDilengkapi.length > 0 && (
             <div className="rounded-lg border border-amber-300 bg-amber-50/70 dark:bg-amber-950/20 p-4 space-y-3">
               <div className="flex items-start gap-2 text-amber-900 dark:text-amber-200">
                 <AlertTriangle className="size-5 shrink-0 text-amber-600 mt-0.5" />
                 <div>
                   <h3 className="text-sm font-semibold">
-                    Perlu Dilengkapi: {dueData.perluDilengkapi.length} Karyawan Kontrak Belum Memiliki Tanggal Akhir
+                    Perlu Dilengkapi: {filteredPerluDilengkapi.length} Karyawan Kontrak Belum Memiliki Tanggal Akhir
                   </h3>
                   <p className="mt-0.5 text-xs text-amber-800 dark:text-amber-300">
                     Karyawan berikut berstatus PKWT/Freelance/Training tetapi tanggal habis kontraknya masih kosong di Google Sheet.
@@ -870,7 +1053,7 @@ export function JatuhTempoView({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-amber-100 dark:divide-amber-900/40">
-                    {dueData.perluDilengkapi.map((emp) => (
+                    {filteredPerluDilengkapi.map((emp) => (
                       <tr key={emp.id || emp.nama_key} className="hover:bg-amber-50/50">
                         <td className="py-2 px-3 font-medium text-text-1">{emp.nama_asli}</td>
                         <td className="py-2 px-3 font-mono text-[11px] text-text-2">{emp.nik_internal || "-"}</td>

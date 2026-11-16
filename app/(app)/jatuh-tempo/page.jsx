@@ -35,15 +35,10 @@ export default async function JatuhTempoPage({ searchParams }) {
   try {
     const [dueRes] = await Promise.all([
       getDueEmployees({
-        status: initialStatus === "semua" ? null : initialStatus,
-        perusahaan: initialPerusahaan === "semua" ? null : initialPerusahaan,
-        search: initialSearch,
         includeRenewed: true,
         now: new Date(),
       }),
       getDueSp({
-        perusahaan: initialPerusahaan === "semua" ? null : initialPerusahaan,
-        search: initialSearch,
         now: new Date(),
       }),
     ]);
