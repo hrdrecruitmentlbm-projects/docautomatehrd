@@ -47,28 +47,42 @@ export async function POST(req) {
       return Response.json({ saved: true, persistHint, lastSyncAt: nowIso });
     }
 
-    // ---- Probe: tiny reads only (header block + first column for row count)
+    // ---- Probe: tiny reads only (header block + A:E span for accurate last row)
     if (body?.probe) {
       let tab = body?.tab;
       let tabs = null;
       if (!tab) {
-        tabs = await getSheetTabs(session.accessToken, spreadsheetId);
+        tabs = await getSheetTabs(session.accessToken, spreadsheetId, session.user.email);
         if (tabs.length === 0) {
           return Response.json({ error: "Spreadsheet tidak punya tab." }, { status: 400 });
         }
         tab = tabs[0].title;
       }
-      const head = await readRangeValues(session.accessToken, spreadsheetId, `${quoteTab(tab)}!A1:AZ80`);
+      const head = await readRangeValues(
+        session.accessToken,
+        spreadsheetId,
+        `${quoteTab(tab)}!A1:AZ80`,
+        session.user.email
+      );
       const headerIdx = findMasterHeaderIndex(head);
       if (headerIdx < 0) {
         return Response.json({ error: 'Baris header NAMA tidak ditemukan di 80 baris pertama tab ini.' }, { status: 400 });
       }
       const headerRow = head[headerIdx].map((c) => String(c ?? ""));
       const headerIndex = headerIdx + 1; // 1-based row number
-      const firstCol = await readRangeValues(
-        session.accessToken, spreadsheetId, `${quoteTab(tab)}!A${headerIndex + 1}:A2000`
+      const spanCols = await readRangeValues(
+        session.accessToken,
+        spreadsheetId,
+        `${quoteTab(tab)}!A${headerIndex + 1}:E5000`,
+        session.user.email
       );
-      const totalRows = firstCol.filter((r) => String(r[0] ?? "").trim() !== "").length;
+      let lastRowOffset = 0;
+      spanCols.forEach((r, i) => {
+        if ((r || []).some((c) => String(c ?? "").trim() !== "")) {
+          lastRowOffset = i + 1;
+        }
+      });
+      const totalRows = lastRowOffset;
       return Response.json({ tab, tabs, headerRow, headerIndex, totalRows });
     }
 
@@ -79,13 +93,16 @@ export async function POST(req) {
       const startRow = parseInt(body.startRow, 10);
       const endRow = parseInt(body.endRow, 10) || startRow + CHUNK_ROWS - 1;
       const rows = await readRangeValues(
-        session.accessToken, spreadsheetId, `${quoteTab(tab)}!A${startRow}:AZ${endRow}`
+        session.accessToken,
+        spreadsheetId,
+        `${quoteTab(tab)}!A${startRow}:AZ${endRow}`,
+        session.user.email
       );
       const nonEmpty = rows.filter((r) => r.some((c) => String(c ?? "").trim() !== ""));
       if (nonEmpty.length === 0) return Response.json({ synced: 0, duplicates: [], perluDilengkapi: [] });
-      const { employees } = mapMasterRows(body.headers, nonEmpty);
+      const { employees, rawHabisByKey } = mapMasterRows(body.headers, nonEmpty);
       const duplicates = findDuplicateNames(employees);
-      const perluDilengkapi = findEmployeesNeedingExpiry(employees);
+      const perluDilengkapi = findEmployeesNeedingExpiry(employees, rawHabisByKey);
       const liniBisnis = [...new Set(employees.map((e) => e.lini_bisnis).filter(Boolean))].sort();
       let warning = null;
       if (employees.length > 0) {
@@ -99,13 +116,13 @@ export async function POST(req) {
     let tabs = null;
     let tab = body?.tab;
     if (!tab) {
-      tabs = await getSheetTabs(session.accessToken, spreadsheetId);
+      tabs = await getSheetTabs(session.accessToken, spreadsheetId, session.user.email);
       if (tabs.length === 0) {
         return Response.json({ error: "Spreadsheet tidak punya tab." }, { status: 400 });
       }
       tab = tabs[0].title;
     }
-    const aoa = await readTabValues(session.accessToken, spreadsheetId, tab);
+    const aoa = await readTabValues(session.accessToken, spreadsheetId, tab, "AZ2000", session.user.email);
     const result = await syncMasterAoa(aoa, tab);
     const nowIso = new Date().toISOString();
 

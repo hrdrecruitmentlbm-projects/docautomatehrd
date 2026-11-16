@@ -10,11 +10,12 @@ alter table document_logs
   add column if not exists perpanjangan_dari uuid null,
   add column if not exists masa_berlaku_bulan integer null;
 
--- 3. settings: konfigurasi masa berlaku SP (default 6 bulan; NULL = tanpa masa berlaku) & timestamp sync master
+-- 3. settings: konfigurasi masa berlaku SP (default 6 bulan; NULL = tanpa masa berlaku), tab payroll & timestamp sync master
 alter table settings
   add column if not exists sp1_masa_berlaku_bulan integer default 6,
   add column if not exists sp2_masa_berlaku_bulan integer default 6,
   add column if not exists sp3_masa_berlaku_bulan integer default 6,
+  add column if not exists payroll_tab text,
   add column if not exists last_master_sync_at timestamptz;
 
 -- 4. Index performa query jatuh tempo

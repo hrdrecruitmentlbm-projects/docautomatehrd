@@ -509,6 +509,35 @@ assert(
   "Reg-3. Status PKWT 1 / PKWT II terbaca di filter PKWT sedangkan PKWTT tetap dikecualikan"
 );
 
+assert(
+  toIsoDate("Senin, 17 Agustus 2026") === "2026-08-17" &&
+    toIsoDate("17 Ags 2026") === "2026-08-17" &&
+    toIsoDate("17-Peb-26") === "2026-02-17" &&
+    toIsoDate("17 / 11 / 2026") === "2026-11-17" &&
+    toIsoDate("2026.11.17") === "2026-11-17" &&
+    toIsoDate("17 Nop 2026.") === "2026-11-17" &&
+    toIsoDate("s.d. 17 Nov 2026") === "2026-11-17",
+  "Reg-4. Format tanggal tambahan (nama hari, Ags/Peb/Nop, spasi di pemisah, YYYY.MM.DD, s.d.) terbaca ke ISO"
+);
+
+const keaktifanHeaders = [
+  "NO", "NAMA", "NIK", "JK", "POSISI", "DIVISI", "LINI BISNIS",
+  "TANGGAL MASUK", "STATUS KARYAWAN", "TANGGAL HABIS KONTRAK", "Sisa Kontrak", "KEAKTIFAN",
+];
+const keaktifanRows = [
+  ["1", "Karyawan Resign Lama", "24.01.001", "L", "Staff", "OPS", "LBM", "2024-01-01", "PKWT", "", "", "TIDAK AKTIF"],
+  ["2", "Karyawan Aktif Kosong", "26.10.002", "P", "Staff", "OPS", "LBM", "2026-10-01", "PKWT", "Belum tau", "", "AKTIF"],
+];
+const mappedKeaktifan = mapMasterRows(keaktifanHeaders, keaktifanRows);
+const processedKeaktifan = processDueEmployees(mappedKeaktifan.employees, [], {
+  now: NOW_TEST,
+  includeRenewed: true,
+});
+assert(
+  !processedKeaktifan.perluDilengkapi.some((i) => i.nama_asli === "Karyawan Resign Lama") &&
+    processedKeaktifan.perluDilengkapi.some((i) => i.nama_asli === "Karyawan Aktif Kosong") &&
+    mappedKeaktifan.rawHabisByKey["karyawan aktif kosong"] === "Belum tau",
+  "Reg-5. Karyawan dengan KEAKTIFAN='TIDAK AKTIF' dikecualikan dari perluDilengkapi, dan nilai tak terbaca tercatat di rawHabisByKey"
+);
+
 console.log("\n🎉 SEMUA PENGUJIAN LOGIKA, KRITERIA 6a-6f, REVISI BAGIAN 1 & 3, DAN REGRESI BERHASIL 100%!");
-
-

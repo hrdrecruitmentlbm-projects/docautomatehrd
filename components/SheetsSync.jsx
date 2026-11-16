@@ -468,9 +468,20 @@ export function SheetsSync({
                     </summary>
                     <div className="mt-2 max-h-48 overflow-y-auto rounded border border-amber-200 bg-white/70 p-2 space-y-1">
                       {masterResult.perluDilengkapi.map((emp, i) => (
-                        <div key={i} className="flex items-center justify-between text-[11px] border-b border-amber-100 last:border-b-0 py-0.5">
-                          <span className="font-mono font-medium text-slate-800">{emp.nama}</span>
-                          <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-800 font-semibold uppercase">
+                        <div key={i} className="flex items-center justify-between gap-2 text-[11px] border-b border-amber-100 last:border-b-0 py-0.5">
+                          <div className="min-w-0">
+                            <span className="font-mono font-medium text-slate-800">{emp.nama}</span>
+                            {emp.rawHabis ? (
+                              <span className="ml-2 text-[10px] text-red-700">
+                                Sheet: &quot;{emp.rawHabis}&quot;
+                              </span>
+                            ) : (
+                              <span className="ml-2 text-[10px] text-amber-700">
+                                (kosong di Sheet)
+                              </span>
+                            )}
+                          </div>
+                          <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-800 font-semibold uppercase">
                             {emp.status}
                           </span>
                         </div>

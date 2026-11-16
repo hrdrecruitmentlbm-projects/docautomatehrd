@@ -97,13 +97,17 @@ export async function GET(req) {
 
   // 6. Row count
   let totalRows = 0;
-  await run("Hitung baris (kolom A)", async () => {
+  await run("Hitung rentang baris (kolom A-E)", async () => {
     const col = await readRangeValues(
-      session.accessToken, spreadsheetId, `${quoteTab(tab)}!A${headerIndex + 1}:A2000`
+      session.accessToken, spreadsheetId, `${quoteTab(tab)}!A${headerIndex + 1}:E5000`, session.user.email
     );
-    totalRows = col.filter((r) => String(r[0] ?? "").trim() !== "").length;
+    col.forEach((r, i) => {
+      if ((r || []).some((c) => String(c ?? "").trim() !== "")) {
+        totalRows = i + 1;
+      }
+    });
     if (totalRows === 0) throw new Error("Tidak ada data di bawah header.");
-    return `${totalRows} baris karyawan`;
+    return `hingga baris ke-${totalRows} di bawah header`;
   });
 
   // 7. One real chunk read (40 rows)
