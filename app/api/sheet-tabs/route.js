@@ -26,7 +26,7 @@ export async function GET(req) {
     const folderId = extractFolderId(raw);
     if (folderId && isValidGoogleId(folderId)) {
       try {
-        const files = await listSpreadsheetFiles(session.accessToken, folderId);
+        const files = await listSpreadsheetFiles(session.accessToken, folderId, session.user.email);
         if (files.length > 0) {
           const picked = pickNewestFile(files);
           if (picked?.file?.id) {
@@ -46,7 +46,7 @@ export async function GET(req) {
     return Response.json({ error: "Link tidak valid. Tempel URL spreadsheet atau folder Drive lengkap." }, { status: 400 });
   }
   try {
-    const tabs = await getSheetTabs(session.accessToken, spreadsheetId);
+    const tabs = await getSheetTabs(session.accessToken, spreadsheetId, session.user.email);
     const gid = extractGid(raw);
     const suggestedTab =
       gid != null ? tabs.find((t) => String(t.sheetId) === String(gid))?.title || null : null;

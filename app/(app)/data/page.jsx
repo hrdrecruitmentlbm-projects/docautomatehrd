@@ -78,6 +78,7 @@ export default async function DataPage() {
           initialPayrollTab={saved.payroll_tab || ""}
           initialLastMasterSync={saved.last_master_sync_at || null}
           payrollLocked={firstRun && !payrollPreset}
+          userEmail={session?.user?.email || ""}
         />
         <CompanyMapForm />
       </div>

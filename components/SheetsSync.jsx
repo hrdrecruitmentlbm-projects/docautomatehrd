@@ -43,6 +43,7 @@ export function SheetsSync({
   initialPayrollTab = "",
   initialLastMasterSync = null,
   payrollLocked = false,
+  userEmail = "",
 }) {
   const router = useRouter();
   const [masterUrl, setMasterUrl] = useState(initialMasterUrl);
@@ -336,7 +337,9 @@ export function SheetsSync({
         </div>
         <p className="mt-1 text-sm text-text-2">
           Tempel link Google Sheet master, pilih tab, lalu Sync. Pastikan Sheet
-          dibagikan ke email login Anda (Viewer cukup).
+          dibagikan ke email login Anda{" "}
+          {userEmail ? <span className="font-mono font-semibold text-text-1">({userEmail})</span> : null}{" "}
+          sebagai Pelihat/Viewer (bukan ke service account).
         </p>
 
         <div className="mt-4 space-y-4">
@@ -521,7 +524,9 @@ export function SheetsSync({
         </div>
         <p className="mt-1 text-sm text-text-2">
           Tempel link Google Sheet payroll, pilih tab/sheet, lalu Sync. Pastikan Sheet
-          dibagikan ke email login Anda (Viewer cukup). Bisa juga link folder Drive.
+          dibagikan ke email login Anda{" "}
+          {userEmail ? <span className="font-mono font-semibold text-text-1">({userEmail})</span> : null}{" "}
+          sebagai Pelihat/Viewer (bukan ke service account). Bisa juga link folder Drive.
         </p>
 
         <div className={`mt-4 space-y-4 ${payrollLocked ? "opacity-60" : ""}`} aria-disabled={payrollLocked || undefined}>

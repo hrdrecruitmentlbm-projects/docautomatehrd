@@ -37,12 +37,12 @@ export async function POST(req) {
       let tab;
       if (body?.tab) {
         tab = body.tab;
-        aoa = await readTabValues(session.accessToken, directId, tab);
+        aoa = await readTabValues(session.accessToken, directId, tab, "AZ2000", session.user.email);
       } else {
         ({ aoa, tab } = await readDriveFileAsAoa(
           session.accessToken,
           { id: directId, mimeType: "application/vnd.google-apps.spreadsheet" },
-          { tabTitle: body?.tab, gid }
+          { tabTitle: body?.tab, gid, userEmail: session.user.email }
         ));
       }
       const periode = body?.periode_bulan || new Date().toISOString().slice(0, 7);
@@ -59,13 +59,14 @@ export async function POST(req) {
     if (!isValidGoogleId(folderId)) {
       return Response.json({ error: "Link folder tidak valid. Tempel URL folder (.../drive/folders/...) atau link file spreadsheet langsung." }, { status: 400 });
     }
-    const files = await listSpreadsheetFiles(session.accessToken, folderId);
+    const files = await listSpreadsheetFiles(session.accessToken, folderId, session.user.email);
     if (files.length === 0) {
       return Response.json({ error: "Tidak ada file spreadsheet di folder tersebut." }, { status: 400 });
     }
     const picked = pickNewestFile(files);
     const { aoa, tab } = await readDriveFileAsAoa(session.accessToken, picked.file, {
       tabTitle: body?.tab,
+      userEmail: session.user.email,
     });
     const periode = body?.periode_bulan || picked.periode || extractPeriode("", picked.file.modifiedTime) || new Date().toISOString().slice(0, 7);
     const result = await syncPayrollAoa(aoa, periode);
