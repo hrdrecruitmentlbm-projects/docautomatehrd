@@ -1,6 +1,7 @@
 import { auth } from "@/auth";
 import { supabaseAdmin } from "@/lib/supabase";
 import { LINI_BISNIS_MAP, normalizeLiniBisnis } from "@/lib/pkwt";
+import { extractFileId, extractFolderId } from "@/lib/google-ids";
 
 // GET /api/company-map — gabungan company_map DB + default kode.
 // POST /api/company-map — body { mappings: [{ lini_bisnis, company_code, legal_name,
@@ -53,9 +54,9 @@ export async function POST(req) {
     lini_bisnis: normalizeLiniBisnis(m.lini_bisnis),
     company_code: m.company_code ? String(m.company_code).trim().toUpperCase() || null : null,
     legal_name: m.legal_name ? String(m.legal_name).trim() : null,
-    pkwt_template_id: m.pkwt_template_id ? String(m.pkwt_template_id).trim() : null,
-    paklaring_template_id: m.paklaring_template_id ? String(m.paklaring_template_id).trim() : null,
-    pkwt_folder_id: m.pkwt_folder_id ? String(m.pkwt_folder_id).trim() : null,
+    pkwt_template_id: m.pkwt_template_id ? extractFileId(String(m.pkwt_template_id).trim()) || String(m.pkwt_template_id).trim() : null,
+    paklaring_template_id: m.paklaring_template_id ? extractFileId(String(m.paklaring_template_id).trim()) || String(m.paklaring_template_id).trim() : null,
+    pkwt_folder_id: m.pkwt_folder_id ? extractFolderId(String(m.pkwt_folder_id).trim()) || String(m.pkwt_folder_id).trim() : null,
     updated_at: new Date().toISOString(),
   })).filter((m) => m.lini_bisnis);
 
