@@ -161,7 +161,6 @@ export async function POST(req) {
     const mulaiBulan = String(r.mulai_dari_bulan || "").trim() || null;
 
     cleanedRoots.push({
-      ...(r.id ? { id: r.id } : {}),
       label,
       folder_id: cleanFolderId,
       aktif: r.aktif !== false,
