@@ -4,7 +4,7 @@
  * Dijalankan dengan: node scripts/test-jatuh-tempo.mjs
  */
 
-import { processDueEmployees, isContractRenewed } from "../lib/jatuh-tempo.js";
+import { processDueEmployees, isContractRenewed, processRenewals } from "../lib/jatuh-tempo.js";
 import { daysUntil } from "../lib/contract-lifecycle.js";
 
 function assert(condition, message) {
@@ -540,4 +540,67 @@ assert(
   "Reg-5. Karyawan dengan KEAKTIFAN='TIDAK AKTIF' dikecualikan dari perluDilengkapi, dan nilai tak terbaca tercatat di rawHabisByKey"
 );
 
+// Reg-6: Rekap perpanjangan mencakup dokumen tunggal yang memperpanjang kolom J Sheet maupun rantai >= 2 dokumen + perpanjangan_dari
+const renewalTestEmployees = [
+  {
+    nama_key: "dimas sugiono",
+    nama_asli: "Dimas Sugiono",
+    status_karyawan: "PKWT",
+    lini_bisnis: "LBM",
+    tanggal_masuk: "2025-11-26",
+    tanggal_habis_kontrak: "2026-11-10",
+  },
+  {
+    nama_key: "ali usman",
+    nama_asli: "Ali Usman",
+    status_karyawan: "FREELANCE",
+    lini_bisnis: "LBM",
+    tanggal_masuk: "2026-05-28",
+    tanggal_habis_kontrak: "2026-11-28",
+  },
+];
+const renewalTestContracts = [
+  // Hanya 1 dokumen PKWT di aplikasi/Drive, namun tanggal_mulai >= tanggal_habis_kontrak Sheet (2026-11-10)
+  {
+    id: "app_doc-single-1",
+    source_id: "doc-single-1",
+    sumber: "aplikasi",
+    nama_key: "dimas sugiono",
+    nama_asli: "Dimas Sugiono",
+    lini_bisnis: "LBM",
+    kode_perusahaan: "LBM",
+    nomor_surat: "0101/PKWT/HRD-LBM/XI/2026",
+    tanggal_mulai: "2026-11-11",
+    tanggal_berakhir: "2027-05-10",
+    jangka_bulan: 6,
+    status_dokumen: "draft",
+    created_at: "2026-11-17T03:00:00Z",
+    perpanjangan_dari: null,
+  },
+];
+const renewalDue = processDueEmployees(renewalTestEmployees, renewalTestContracts, {
+  now: NOW_TEST,
+  includeRenewed: true,
+});
+const rekapMulai = processRenewals(renewalTestContracts, renewalDue, {
+  bulan: "2026-11",
+  basis: "mulai",
+  now: NOW_TEST,
+});
+const rekapDibuat = processRenewals(renewalTestContracts, renewalDue, {
+  bulan: "2026-11",
+  basis: "dibuat",
+  now: NOW_TEST,
+});
+assert(
+  rekapMulai.total === 1 &&
+    rekapMulai.items[0].nama_asli === "Dimas Sugiono" &&
+    rekapMulai.items[0].tanggal_akhir_lama === "2026-11-10" &&
+    rekapMulai.items[0].durasi_bulan === 6 &&
+    rekapMulai.summary.belumDiperpanjangCount === 1 &&
+    rekapDibuat.total === 1,
+  "Reg-6. processRenewals mendeteksi perpanjangan dari dokumen tunggal yang memperpanjang kolom J Sheet (mulai & dibuat) serta menghitung belumDiperpanjangCount dengan akurat"
+);
+
 console.log("\n🎉 SEMUA PENGUJIAN LOGIKA, KRITERIA 6a-6f, REVISI BAGIAN 1 & 3, DAN REGRESI BERHASIL 100%!");
+

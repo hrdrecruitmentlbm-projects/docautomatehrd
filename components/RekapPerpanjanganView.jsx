@@ -18,21 +18,10 @@ import {
   Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { RenewalsBarChart } from "@/components/RenewalsBarChart";
-import { formatIsoId, getMonthLabel } from "@/lib/contract-lifecycle";
+import { formatIsoId, getMonthLabel, getAdjacentMonthIso } from "@/lib/contract-lifecycle";
 
-function getAdjacentMonth(currentMonthIso, offset) {
-  if (!currentMonthIso) {
-    const now = new Date();
-    currentMonthIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  }
-  const [y, m] = currentMonthIso.split("-").map(Number);
-  const d = new Date(y, m - 1 + offset, 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
-
-export function RekapPerpanjanganView({ renewalsData, currentMonth }) {
+export function RekapPerpanjanganView({ renewalsData, currentMonth, loadError = null }) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -41,6 +30,18 @@ export function RekapPerpanjanganView({ renewalsData, currentMonth }) {
   const items = renewalsData?.items || [];
   const summary = renewalsData?.summary || {};
   const trend = renewalsData?.trend12Months || [];
+
+  const monthOptions = React.useMemo(() => {
+    const keys = new Set();
+    for (const m of renewalsData?.trend12Months || []) if (m?.bulan) keys.add(m.bulan);
+    for (const m of renewalsData?.availableMonths || []) if (m) keys.add(m);
+    if (selectedBulan && selectedBulan !== "semua") keys.add(selectedBulan);
+    if (currentMonth) keys.add(currentMonth);
+    return Array.from(keys).sort().map((m) => ({
+      bulan: m,
+      label: getMonthLabel(m) || m,
+    }));
+  }, [renewalsData, selectedBulan, currentMonth]);
 
   const updateUrlParams = (newParams) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -59,13 +60,15 @@ export function RekapPerpanjanganView({ renewalsData, currentMonth }) {
   };
 
   const handlePrevMonth = () => {
-    const prev = getAdjacentMonth(selectedBulan, -1);
-    handleMonthChange(prev);
+    const base = selectedBulan && selectedBulan !== "semua" ? selectedBulan : currentMonth;
+    const prev = getAdjacentMonthIso(base, -1);
+    if (prev) handleMonthChange(prev);
   };
 
   const handleNextMonth = () => {
-    const next = getAdjacentMonth(selectedBulan, 1);
-    handleMonthChange(next);
+    const base = selectedBulan && selectedBulan !== "semua" ? selectedBulan : currentMonth;
+    const next = getAdjacentMonthIso(base, 1);
+    if (next) handleMonthChange(next);
   };
 
   const handleBasisToggle = (basis) => {
@@ -103,6 +106,13 @@ export function RekapPerpanjanganView({ renewalsData, currentMonth }) {
         </div>
       </div>
 
+      {loadError && (
+        <div className="flex items-start gap-2 rounded-lg border border-red-300 bg-red-50/80 p-3 text-xs text-red-900">
+          <AlertCircle className="size-4 shrink-0 text-red-600 mt-0.5" />
+          <span>{loadError}</span>
+        </div>
+      )}
+
       {/* Bar Pengaturan: Pemilih Bulan + Toggle Basis */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 rounded-lg border border-border bg-surface-1 p-3.5">
         {/* Navigasi Bulan */}
@@ -118,12 +128,19 @@ export function RekapPerpanjanganView({ renewalsData, currentMonth }) {
           </Button>
 
           <div className="flex items-center gap-2">
-            <Input
-              type="month"
-              value={selectedBulan && selectedBulan !== "semua" ? selectedBulan : ""}
+            <select
+              aria-label="Pilih bulan rekap perpanjangan"
+              value={selectedBulan || currentMonth}
               onChange={(e) => handleMonthChange(e.target.value)}
-              className="h-8 w-44 font-mono text-xs"
-            />
+              className="h-8 min-w-44 rounded-md border border-border bg-surface-0 px-2.5 text-xs font-medium text-text-1 focus:border-primary focus:outline-none"
+            >
+              <option value="semua">Semua Periode</option>
+              {monthOptions.map((opt) => (
+                <option key={opt.bulan} value={opt.bulan}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
             <Button
               variant="ghost"
               size="sm"

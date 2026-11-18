@@ -28,6 +28,7 @@ export default async function RekapPerpanjanganPage({ searchParams }) {
     availableMonths: [],
   };
 
+  let loadError = null;
   try {
     renewalsData = await getRenewals({
       bulan: selectedBulan,
@@ -36,6 +37,7 @@ export default async function RekapPerpanjanganPage({ searchParams }) {
     });
   } catch (err) {
     console.error("Gagal mengambil data rekap perpanjangan:", err);
+    loadError = err?.message || "Gagal memuat data rekap perpanjangan.";
   }
 
   return (
@@ -43,6 +45,7 @@ export default async function RekapPerpanjanganPage({ searchParams }) {
       <RekapPerpanjanganView
         renewalsData={renewalsData}
         currentMonth={currentMonth}
+        loadError={loadError}
       />
     </div>
   );
